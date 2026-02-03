@@ -1,0 +1,205 @@
+package com.microboxlabs.miot.calendar.service;
+
+import com.microboxlabs.miot.calendar.entity.Calendar;
+import com.microboxlabs.miot.calendar.entity.TimeWindow;
+import com.microboxlabs.miot.calendar.model.CalendarRequest;
+import com.microboxlabs.miot.calendar.model.TimeWindowRequest;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.transaction.Transactional;
+import org.jboss.logging.Logger;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+/**
+ * Service for calendar operations
+ */
+@ApplicationScoped
+public class CalendarService {
+
+    private static final Logger LOG = Logger.getLogger(CalendarService.class);
+
+    /**
+     * Get all calendars
+     */
+    public List<Calendar> getAllCalendars() {
+        return Calendar.listAll();
+    }
+
+    /**
+     * Get all active calendars
+     */
+    public List<Calendar> getActiveCalendars() {
+        return Calendar.findAllActive();
+    }
+
+    /**
+     * Get calendar by ID
+     */
+    public Optional<Calendar> getCalendarById(UUID id) {
+        return Optional.ofNullable(Calendar.findById(id));
+    }
+
+    /**
+     * Get calendar by code
+     */
+    public Optional<Calendar> getCalendarByCode(String code) {
+        return Optional.ofNullable(Calendar.findByCode(code));
+    }
+
+    /**
+     * Create a new calendar
+     */
+    @Transactional
+    public Calendar createCalendar(CalendarRequest request) {
+        request.validate();
+        
+        // Check if code already exists
+        if (Calendar.findByCode(request.code()) != null) {
+            throw new IllegalArgumentException("Calendar with code '" + request.code() + "' already exists");
+        }
+
+        Calendar calendar = new Calendar();
+        calendar.code = request.code();
+        calendar.name = request.name();
+        calendar.description = request.description();
+        calendar.timezone = request.timezone() != null ? request.timezone() : "America/Santiago";
+        calendar.active = request.active() != null ? request.active() : true;
+        
+        calendar.persist();
+        LOG.infof("Created calendar: %s (%s)", calendar.name, calendar.code);
+        
+        return calendar;
+    }
+
+    /**
+     * Update an existing calendar
+     */
+    @Transactional
+    public Calendar updateCalendar(UUID id, CalendarRequest request) {
+        Calendar calendar = Calendar.findById(id);
+        if (calendar == null) {
+            throw new IllegalArgumentException("Calendar not found: " + id);
+        }
+
+        // Check if new code conflicts with existing
+        if (request.code() != null && !request.code().equals(calendar.code)) {
+            Calendar existing = Calendar.findByCode(request.code());
+            if (existing != null && !existing.id.equals(id)) {
+                throw new IllegalArgumentException("Calendar with code '" + request.code() + "' already exists");
+            }
+            calendar.code = request.code();
+        }
+
+        if (request.name() != null) {
+            calendar.name = request.name();
+        }
+        if (request.description() != null) {
+            calendar.description = request.description();
+        }
+        if (request.timezone() != null) {
+            calendar.timezone = request.timezone();
+        }
+        if (request.active() != null) {
+            calendar.active = request.active();
+        }
+
+        LOG.infof("Updated calendar: %s (%s)", calendar.name, calendar.code);
+        return calendar;
+    }
+
+    /**
+     * Deactivate a calendar
+     */
+    @Transactional
+    public void deactivateCalendar(UUID id) {
+        Calendar calendar = Calendar.findById(id);
+        if (calendar == null) {
+            throw new IllegalArgumentException("Calendar not found: " + id);
+        }
+        calendar.active = false;
+        LOG.infof("Deactivated calendar: %s (%s)", calendar.name, calendar.code);
+    }
+
+    // Time Window operations
+
+    /**
+     * Get time windows for a calendar
+     */
+    public List<TimeWindow> getTimeWindows(UUID calendarId) {
+        return TimeWindow.findActiveByCalendarId(calendarId);
+    }
+
+    /**
+     * Create a time window
+     */
+    @Transactional
+    public TimeWindow createTimeWindow(UUID calendarId, TimeWindowRequest request) {
+        request.validate();
+        
+        Calendar calendar = Calendar.findById(calendarId);
+        if (calendar == null) {
+            throw new IllegalArgumentException("Calendar not found: " + calendarId);
+        }
+
+        TimeWindow timeWindow = new TimeWindow();
+        timeWindow.calendar = calendar;
+        timeWindow.name = request.name();
+        timeWindow.startHour = request.startHour();
+        timeWindow.endHour = request.endHour();
+        timeWindow.slotDurationMinutes = request.slotDurationMinutes() != null ? request.slotDurationMinutes() : 30;
+        timeWindow.capacityPerSlot = request.capacityPerSlot() != null ? request.capacityPerSlot() : 1;
+        timeWindow.daysOfWeek = request.daysOfWeek() != null ? request.daysOfWeek() : "MON,TUE,WED,THU,FRI";
+        timeWindow.validFrom = request.validFrom();
+        timeWindow.validTo = request.validTo();
+        timeWindow.active = request.active() != null ? request.active() : true;
+
+        timeWindow.persist();
+        LOG.infof("Created time window: %s for calendar %s", timeWindow.name, calendar.code);
+        
+        return timeWindow;
+    }
+
+    /**
+     * Update a time window
+     */
+    @Transactional
+    public TimeWindow updateTimeWindow(UUID timeWindowId, TimeWindowRequest request) {
+        TimeWindow timeWindow = TimeWindow.findById(timeWindowId);
+        if (timeWindow == null) {
+            throw new IllegalArgumentException("Time window not found: " + timeWindowId);
+        }
+
+        if (request.name() != null) {
+            timeWindow.name = request.name();
+        }
+        if (request.startHour() != null) {
+            timeWindow.startHour = request.startHour();
+        }
+        if (request.endHour() != null) {
+            timeWindow.endHour = request.endHour();
+        }
+        if (request.slotDurationMinutes() != null) {
+            timeWindow.slotDurationMinutes = request.slotDurationMinutes();
+        }
+        if (request.capacityPerSlot() != null) {
+            timeWindow.capacityPerSlot = request.capacityPerSlot();
+        }
+        if (request.daysOfWeek() != null) {
+            timeWindow.daysOfWeek = request.daysOfWeek();
+        }
+        if (request.validFrom() != null) {
+            timeWindow.validFrom = request.validFrom();
+        }
+        if (request.validTo() != null) {
+            timeWindow.validTo = request.validTo();
+        }
+        if (request.active() != null) {
+            timeWindow.active = request.active();
+        }
+
+        LOG.infof("Updated time window: %s", timeWindow.name);
+        return timeWindow;
+    }
+}

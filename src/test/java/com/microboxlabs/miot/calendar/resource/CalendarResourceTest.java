@@ -1,0 +1,159 @@
+package com.microboxlabs.miot.calendar.resource;
+
+import io.quarkus.test.junit.QuarkusTest;
+import io.restassured.http.ContentType;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.CoreMatchers.*;
+
+@QuarkusTest
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+class CalendarResourceTest {
+
+    private static String calendarId;
+
+    @Test
+    @Order(1)
+    void testCreateCalendar() {
+        calendarId = given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "code": "test-calendar",
+                    "name": "Test Calendar",
+                    "description": "Calendar for testing",
+                    "timezone": "America/Santiago"
+                }
+                """)
+            .when()
+            .post("/api/calendars")
+            .then()
+            .statusCode(201)
+            .body("code", equalTo("test-calendar"))
+            .body("name", equalTo("Test Calendar"))
+            .body("active", equalTo(true))
+            .extract()
+            .path("id");
+    }
+
+    @Test
+    @Order(2)
+    void testListCalendars() {
+        given()
+            .when()
+            .get("/api/calendars")
+            .then()
+            .statusCode(200)
+            .body("size()", greaterThan(0));
+    }
+
+    @Test
+    @Order(3)
+    void testGetCalendar() {
+        given()
+            .when()
+            .get("/api/calendars/" + calendarId)
+            .then()
+            .statusCode(200)
+            .body("code", equalTo("test-calendar"));
+    }
+
+    @Test
+    @Order(4)
+    void testUpdateCalendar() {
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "name": "Updated Test Calendar"
+                }
+                """)
+            .when()
+            .put("/api/calendars/" + calendarId)
+            .then()
+            .statusCode(200)
+            .body("name", equalTo("Updated Test Calendar"));
+    }
+
+    @Test
+    @Order(5)
+    void testCreateTimeWindow() {
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "name": "Morning Shift",
+                    "startHour": 8,
+                    "endHour": 12,
+                    "slotDurationMinutes": 30,
+                    "capacityPerSlot": 2,
+                    "daysOfWeek": "MON,TUE,WED,THU,FRI",
+                    "validFrom": "2025-01-01"
+                }
+                """)
+            .when()
+            .post("/api/calendars/" + calendarId + "/time-windows")
+            .then()
+            .statusCode(201)
+            .body("name", equalTo("Morning Shift"))
+            .body("startHour", equalTo(8))
+            .body("endHour", equalTo(12));
+    }
+
+    @Test
+    @Order(6)
+    void testListTimeWindows() {
+        given()
+            .when()
+            .get("/api/calendars/" + calendarId + "/time-windows")
+            .then()
+            .statusCode(200)
+            .body("size()", greaterThan(0));
+    }
+
+    @Test
+    @Order(7)
+    void testDeactivateCalendar() {
+        given()
+            .when()
+            .delete("/api/calendars/" + calendarId)
+            .then()
+            .statusCode(204);
+
+        // Verify it's deactivated
+        given()
+            .when()
+            .get("/api/calendars/" + calendarId)
+            .then()
+            .statusCode(200)
+            .body("active", equalTo(false));
+    }
+
+    @Test
+    void testCreateCalendarValidation() {
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "name": "Missing Code"
+                }
+                """)
+            .when()
+            .post("/api/calendars")
+            .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void testGetNonExistentCalendar() {
+        given()
+            .when()
+            .get("/api/calendars/00000000-0000-0000-0000-000000000000")
+            .then()
+            .statusCode(404);
+    }
+}
