@@ -12,6 +12,7 @@ import java.time.LocalDate;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.*;
+import static org.hamcrest.Matchers.greaterThan;
 
 /**
  * Tests for the backward-compatible planned-services endpoint
