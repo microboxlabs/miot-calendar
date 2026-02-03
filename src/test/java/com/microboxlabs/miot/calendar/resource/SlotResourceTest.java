@@ -1,13 +1,17 @@
 package com.microboxlabs.miot.calendar.resource;
 
+import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
+import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import java.net.URL;
 import java.time.LocalDate;
 
 import static io.restassured.RestAssured.given;
@@ -16,13 +20,27 @@ import static org.hamcrest.Matchers.greaterThan;
 
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SlotResourceTest {
 
-    private static String calendarId;
-    private static String slotId;
+    @TestHTTPResource
+    URL url;
 
-    @BeforeAll
-    static void setup() {
+    private String calendarId;
+    private String slotId;
+    private boolean setupDone = false;
+
+    @BeforeEach
+    void setupRestAssured() {
+        RestAssured.baseURI = url.toString();
+        RestAssured.port = url.getPort();
+    }
+
+    @BeforeEach
+    void setup() {
+        if (setupDone) return;
+        setupDone = true;
+
         // Create a calendar for testing
         calendarId = given()
             .contentType(ContentType.JSON)
@@ -60,7 +78,7 @@ class SlotResourceTest {
     }
 
     @Test
-    @Order(1)
+    @Order(0)
     void testGenerateSlots() {
         LocalDate today = LocalDate.now();
         LocalDate nextWeek = today.plusDays(7);

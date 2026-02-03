@@ -1,13 +1,19 @@
 package com.microboxlabs.miot.calendar.resource;
 
+import io.quarkus.test.common.http.TestHTTPEndpoint;
+import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
+import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import java.net.URL;
 import java.time.LocalDate;
 
 import static io.restassured.RestAssured.given;
@@ -16,16 +22,29 @@ import static org.hamcrest.Matchers.greaterThan;
 
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BookingResourceTest {
 
-    private static String calendarId;
-    private static String bookingId;
-    private static LocalDate slotDate;
-    private static int slotHour = 10;
-    private static int slotMinutes = 0;
+    @TestHTTPResource
+    URL url;
 
-    @BeforeAll
-    static void setup() {
+    private String calendarId;
+    private String bookingId;
+    private LocalDate slotDate;
+    private int slotHour = 10;
+    private int slotMinutes = 0;
+    private boolean setupDone = false;
+
+    @BeforeEach
+    void setupRestAssured() {
+        RestAssured.baseURI = url.toString();
+        RestAssured.port = url.getPort();
+    }
+
+    @BeforeEach
+    void setup() {
+        if (setupDone) return;
+        setupDone = true;
         slotDate = LocalDate.now().plusDays(1);
 
         // Create a calendar
