@@ -23,7 +23,7 @@ import java.util.UUID;
 /**
  * REST resource for calendar management
  */
-@Path("/api/calendars")
+@Path("/api/v1/miot-calendar/calendars")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(name = "Calendars", description = "Calendar management endpoints")

@@ -24,7 +24,7 @@ import java.util.UUID;
 /**
  * REST resource for slot management
  */
-@Path("/api/slots")
+@Path("/api/v1/miot-calendar/slots")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(name = "Slots", description = "Slot management endpoints")

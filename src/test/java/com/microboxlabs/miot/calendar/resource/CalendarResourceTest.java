@@ -47,7 +47,7 @@ class CalendarResourceTest {
                 }
                 """)
             .when()
-            .post("/api/calendars")
+            .post("/api/v1/miot-calendar/calendars")
             .then()
             .statusCode(201)
             .body("code", equalTo("test-calendar"))
@@ -62,7 +62,7 @@ class CalendarResourceTest {
     void testListCalendars() {
         given()
             .when()
-            .get("/api/calendars")
+            .get("/api/v1/miot-calendar/calendars")
             .then()
             .statusCode(200)
             .body("size()", greaterThan(0));
@@ -73,7 +73,7 @@ class CalendarResourceTest {
     void testGetCalendar() {
         given()
             .when()
-            .get("/api/calendars/" + calendarId)
+            .get("/api/v1/miot-calendar/calendars/" + calendarId)
             .then()
             .statusCode(200)
             .body("code", equalTo("test-calendar"));
@@ -90,7 +90,7 @@ class CalendarResourceTest {
                 }
                 """)
             .when()
-            .put("/api/calendars/" + calendarId)
+            .put("/api/v1/miot-calendar/calendars/" + calendarId)
             .then()
             .statusCode(200)
             .body("name", equalTo("Updated Test Calendar"));
@@ -113,7 +113,7 @@ class CalendarResourceTest {
                 }
                 """)
             .when()
-            .post("/api/calendars/" + calendarId + "/time-windows")
+            .post("/api/v1/miot-calendar/calendars/" + calendarId + "/time-windows")
             .then()
             .statusCode(201)
             .body("name", equalTo("Morning Shift"))
@@ -126,7 +126,7 @@ class CalendarResourceTest {
     void testListTimeWindows() {
         given()
             .when()
-            .get("/api/calendars/" + calendarId + "/time-windows")
+            .get("/api/v1/miot-calendar/calendars/" + calendarId + "/time-windows")
             .then()
             .statusCode(200)
             .body("size()", greaterThan(0));
@@ -137,14 +137,14 @@ class CalendarResourceTest {
     void testDeactivateCalendar() {
         given()
             .when()
-            .delete("/api/calendars/" + calendarId)
+            .delete("/api/v1/miot-calendar/calendars/" + calendarId)
             .then()
             .statusCode(204);
 
         // Verify it's deactivated
         given()
             .when()
-            .get("/api/calendars/" + calendarId)
+            .get("/api/v1/miot-calendar/calendars/" + calendarId)
             .then()
             .statusCode(200)
             .body("active", equalTo(false));
@@ -160,7 +160,7 @@ class CalendarResourceTest {
                 }
                 """)
             .when()
-            .post("/api/calendars")
+            .post("/api/v1/miot-calendar/calendars")
             .then()
             .statusCode(400);
     }
@@ -169,7 +169,7 @@ class CalendarResourceTest {
     void testGetNonExistentCalendar() {
         given()
             .when()
-            .get("/api/calendars/00000000-0000-0000-0000-000000000000")
+            .get("/api/v1/miot-calendar/calendars/00000000-0000-0000-0000-000000000000")
             .then()
             .statusCode(404);
     }

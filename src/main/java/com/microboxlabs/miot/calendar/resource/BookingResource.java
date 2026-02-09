@@ -24,7 +24,7 @@ import java.util.UUID;
 /**
  * REST resource for booking operations
  */
-@Path("/api/bookings")
+@Path("/api/v1/miot-calendar/bookings")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(name = "Bookings", description = "Booking management endpoints")

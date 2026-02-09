@@ -51,7 +51,7 @@ class SlotResourceTest {
                 }
                 """)
             .when()
-            .post("/api/calendars")
+            .post("/api/v1/miot-calendar/calendars")
             .then()
             .statusCode(201)
             .extract()
@@ -72,7 +72,7 @@ class SlotResourceTest {
                 }
                 """, LocalDate.now().toString()))
             .when()
-            .post("/api/calendars/" + calendarId + "/time-windows")
+            .post("/api/v1/miot-calendar/calendars/" + calendarId + "/time-windows")
             .then()
             .statusCode(201);
     }
@@ -93,7 +93,7 @@ class SlotResourceTest {
                 }
                 """, calendarId, today, nextWeek))
             .when()
-            .post("/api/slots/generate")
+            .post("/api/v1/miot-calendar/slots/generate")
             .then()
             .statusCode(200)
             .body("slotsCreated", greaterThan(0))
@@ -111,7 +111,7 @@ class SlotResourceTest {
             .queryParam("startDate", today.toString())
             .queryParam("endDate", nextWeek.toString())
             .when()
-            .get("/api/slots")
+            .get("/api/v1/miot-calendar/slots")
             .then()
             .statusCode(200)
             .body("data.size()", greaterThan(0))
@@ -125,7 +125,7 @@ class SlotResourceTest {
     void testGetSlot() {
         given()
             .when()
-            .get("/api/slots/" + slotId)
+            .get("/api/v1/miot-calendar/slots/" + slotId)
             .then()
             .statusCode(200)
             .body("id", equalTo(slotId));
@@ -142,7 +142,7 @@ class SlotResourceTest {
             .queryParam("endDate", today.plusDays(7).toString())
             .queryParam("available", true)
             .when()
-            .get("/api/slots")
+            .get("/api/v1/miot-calendar/slots")
             .then()
             .statusCode(200)
             .body("data.size()", greaterThan(0));
@@ -159,7 +159,7 @@ class SlotResourceTest {
                 }
                 """)
             .when()
-            .patch("/api/slots/" + slotId + "/status")
+            .patch("/api/v1/miot-calendar/slots/" + slotId + "/status")
             .then()
             .statusCode(200)
             .body("status", equalTo("CLOSED"));
@@ -173,7 +173,7 @@ class SlotResourceTest {
                 }
                 """)
             .when()
-            .patch("/api/slots/" + slotId + "/status")
+            .patch("/api/v1/miot-calendar/slots/" + slotId + "/status")
             .then()
             .statusCode(200)
             .body("status", equalTo("OPEN"));
@@ -183,7 +183,7 @@ class SlotResourceTest {
     void testListSlotsRequiresCalendarId() {
         given()
             .when()
-            .get("/api/slots")
+            .get("/api/v1/miot-calendar/slots")
             .then()
             .statusCode(400);
     }
@@ -198,7 +198,7 @@ class SlotResourceTest {
                 }
                 """)
             .when()
-            .post("/api/slots/generate")
+            .post("/api/v1/miot-calendar/slots/generate")
             .then()
             .statusCode(400);
     }
