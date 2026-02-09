@@ -60,45 +60,38 @@ The application will:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/calendars` | List all calendars |
-| GET | `/api/calendars/{id}` | Get calendar by ID |
-| POST | `/api/calendars` | Create calendar |
-| PUT | `/api/calendars/{id}` | Update calendar |
-| DELETE | `/api/calendars/{id}` | Deactivate calendar |
+| GET | `/api/v1/miot-calendar/calendars` | List all calendars |
+| GET | `/api/v1/miot-calendar/calendars/{id}` | Get calendar by ID |
+| POST | `/api/v1/miot-calendar/calendars` | Create calendar |
+| PUT | `/api/v1/miot-calendar/calendars/{id}` | Update calendar |
+| DELETE | `/api/v1/miot-calendar/calendars/{id}` | Deactivate calendar |
 
 ### Time Windows
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/calendars/{id}/time-windows` | List time windows |
-| POST | `/api/calendars/{id}/time-windows` | Create time window |
-| PUT | `/api/calendars/{id}/time-windows/{twId}` | Update time window |
+| GET | `/api/v1/miot-calendar/calendars/{id}/time-windows` | List time windows |
+| POST | `/api/v1/miot-calendar/calendars/{id}/time-windows` | Create time window |
+| PUT | `/api/v1/miot-calendar/calendars/{id}/time-windows/{twId}` | Update time window |
 
 ### Slots
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/slots?calendarId=X&startDate=Y&endDate=Z` | Query slots |
-| GET | `/api/slots/{id}` | Get slot by ID |
-| POST | `/api/slots/generate` | Generate slots for date range |
-| PATCH | `/api/slots/{id}/status` | Update slot status |
+| GET | `/api/v1/miot-calendar/slots?calendarId=X&startDate=Y&endDate=Z` | Query slots |
+| GET | `/api/v1/miot-calendar/slots/{id}` | Get slot by ID |
+| POST | `/api/v1/miot-calendar/slots/generate` | Generate slots for date range |
+| PATCH | `/api/v1/miot-calendar/slots/{id}/status` | Update slot status |
 
 ### Bookings
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/bookings?calendarId=X&startDate=Y&endDate=Z` | List bookings |
-| GET | `/api/bookings/{id}` | Get booking by ID |
-| POST | `/api/bookings` | Create booking |
-| DELETE | `/api/bookings/{id}` | Cancel booking |
-| GET | `/api/bookings/resource/{resourceId}` | Get bookings by resource |
-
-### Planned Services (Backward Compatibility)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/planned-services?startDate=X&endDate=Y` | List planned services |
-| POST | `/api/planned-services?calendarId=X` | Create planned service |
+| GET | `/api/v1/miot-calendar/bookings?calendarId=X&startDate=Y&endDate=Z` | List bookings |
+| GET | `/api/v1/miot-calendar/bookings/{id}` | Get booking by ID |
+| POST | `/api/v1/miot-calendar/bookings` | Create booking |
+| DELETE | `/api/v1/miot-calendar/bookings/{id}` | Cancel booking |
+| GET | `/api/v1/miot-calendar/bookings/resource/{resourceId}` | Get bookings by resource |
 
 ## Database Schema
 
@@ -150,7 +143,7 @@ docker build -f src/main/docker/Dockerfile.native -t miot-calendar:native .
 ### 1. Create a Calendar
 
 ```bash
-curl -X POST http://localhost:8083/api/calendars \
+curl -X POST http://localhost:8083/api/v1/miot-calendar/calendars \
   -H "Content-Type: application/json" \
   -d '{
     "code": "despacho-santiago",
@@ -162,7 +155,7 @@ curl -X POST http://localhost:8083/api/calendars \
 ### 2. Create a Time Window
 
 ```bash
-curl -X POST http://localhost:8083/api/calendars/{calendarId}/time-windows \
+curl -X POST http://localhost:8083/api/v1/miot-calendar/calendars/{calendarId}/time-windows \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Turno Mañana",
@@ -178,7 +171,7 @@ curl -X POST http://localhost:8083/api/calendars/{calendarId}/time-windows \
 ### 3. Generate Slots
 
 ```bash
-curl -X POST http://localhost:8083/api/slots/generate \
+curl -X POST http://localhost:8083/api/v1/miot-calendar/slots/generate \
   -H "Content-Type: application/json" \
   -d '{
     "calendarId": "{calendarId}",
@@ -190,7 +183,7 @@ curl -X POST http://localhost:8083/api/slots/generate \
 ### 4. Create a Booking
 
 ```bash
-curl -X POST http://localhost:8083/api/bookings \
+curl -X POST http://localhost:8083/api/v1/miot-calendar/bookings \
   -H "Content-Type: application/json" \
   -H "X-User-Id: operator1" \
   -d '{
