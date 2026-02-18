@@ -1,6 +1,7 @@
 package com.microboxlabs.miot.calendar.model;
 
 import com.microboxlabs.miot.calendar.entity.TimeWindow;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
@@ -9,19 +10,45 @@ import java.util.UUID;
 /**
  * Response for a time window
  */
+@Schema(description = "Time window data returned by the API")
 public record TimeWindowResponse(
+    @Schema(required = true, description = "Unique identifier of the time window", format = "uuid")
     UUID id,
+
+    @Schema(required = true, description = "Identifier of the calendar this time window belongs to", format = "uuid")
     UUID calendarId,
+
+    @Schema(required = true, description = "Name of the time window", examples = {"Morning Loading Window"})
     String name,
+
+    @Schema(required = true, description = "Start hour of the time window (inclusive)", minimum = "0", maximum = "23", examples = {"8"})
     Integer startHour,
+
+    @Schema(required = true, description = "End hour of the time window (exclusive)", minimum = "0", maximum = "23", examples = {"12"})
     Integer endHour,
+
+    @Schema(required = true, description = "Duration of each slot in minutes", minimum = "1", examples = {"30"})
     Integer slotDurationMinutes,
+
+    @Schema(required = true, description = "Maximum number of bookings per slot", minimum = "1", examples = {"5"})
     Integer capacityPerSlot,
+
+    @Schema(required = true, description = "Comma-separated days of the week (1=Monday to 7=Sunday)", examples = {"1,2,3,4,5"})
     String daysOfWeek,
+
+    @Schema(required = true, description = "Date from which this time window is valid", format = "date")
     LocalDate validFrom,
+
+    @Schema(description = "Date until which this time window is valid (null means no end date)", format = "date")
     LocalDate validTo,
+
+    @Schema(required = true, description = "Whether the time window is active")
     Boolean active,
+
+    @Schema(required = true, description = "Timestamp when the time window was created", format = "date-time")
     ZonedDateTime createdAt,
+
+    @Schema(required = true, description = "Timestamp when the time window was last updated", format = "date-time")
     ZonedDateTime updatedAt
 ) {
     /**

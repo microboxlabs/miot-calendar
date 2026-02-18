@@ -26,7 +26,7 @@ import java.util.UUID;
 @Path("/api/v1/miot-calendar/calendars")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-@Tag(name = "Calendars", description = "Calendar management endpoints")
+@Tag(name = "Calendars", description = "Calendar and time window management operations")
 public class CalendarResource {
 
     private static final Logger LOG = Logger.getLogger(CalendarResource.class);
@@ -35,28 +35,31 @@ public class CalendarResource {
     CalendarService calendarService;
 
     @GET
-    @Operation(summary = "List calendars", description = "Get all calendars or active calendars only")
-    @APIResponse(responseCode = "200", description = "List of calendars")
+    @Operation(operationId = "listCalendars", summary = "List calendars", description = "Retrieve all calendars, optionally filtered by active status")
+    @APIResponse(responseCode = "200", description = "List of calendars",
+        content = @Content(schema = @Schema(implementation = CalendarResponse[].class)))
     public Response listCalendars(
-            @Parameter(description = "Filter active calendars only") @QueryParam("active") Boolean active) {
-        List<Calendar> calendars = active != null && active 
+            @Parameter(description = "When true, return only active calendars") @QueryParam("active") Boolean active) {
+        List<Calendar> calendars = active != null && active
             ? calendarService.getActiveCalendars()
             : calendarService.getAllCalendars();
-        
+
         List<CalendarResponse> response = calendars.stream()
             .map(CalendarResponse::from)
             .toList();
-        
+
         return Response.ok(response).build();
     }
 
     @GET
     @Path("/{id}")
-    @Operation(summary = "Get calendar by ID", description = "Retrieve a specific calendar")
+    @Operation(operationId = "getCalendar", summary = "Get calendar by ID", description = "Retrieve a specific calendar by its unique identifier")
     @APIResponse(responseCode = "200", description = "Calendar found",
         content = @Content(schema = @Schema(implementation = CalendarResponse.class)))
-    @APIResponse(responseCode = "404", description = "Calendar not found")
-    public Response getCalendar(@PathParam("id") UUID id) {
+    @APIResponse(responseCode = "404", description = "Calendar not found",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public Response getCalendar(
+            @Parameter(description = "Unique identifier of the calendar", required = true) @PathParam("id") UUID id) {
         return calendarService.getCalendarById(id)
             .map(calendar -> Response.ok(CalendarResponse.from(calendar)).build())
             .orElse(Response.status(Response.Status.NOT_FOUND)
@@ -66,10 +69,11 @@ public class CalendarResource {
 
     @POST
     @Transactional
-    @Operation(summary = "Create calendar", description = "Create a new calendar")
+    @Operation(operationId = "createCalendar", summary = "Create calendar", description = "Create a new calendar with the provided configuration")
     @APIResponse(responseCode = "201", description = "Calendar created",
         content = @Content(schema = @Schema(implementation = CalendarResponse.class)))
-    @APIResponse(responseCode = "400", description = "Invalid request")
+    @APIResponse(responseCode = "400", description = "Invalid request",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     public Response createCalendar(CalendarRequest request) {
         try {
             Calendar calendar = calendarService.createCalendar(request);
@@ -87,11 +91,16 @@ public class CalendarResource {
     @PUT
     @Path("/{id}")
     @Transactional
-    @Operation(summary = "Update calendar", description = "Update an existing calendar")
+    @Operation(operationId = "updateCalendar", summary = "Update calendar", description = "Update an existing calendar's configuration")
     @APIResponse(responseCode = "200", description = "Calendar updated",
         content = @Content(schema = @Schema(implementation = CalendarResponse.class)))
-    @APIResponse(responseCode = "404", description = "Calendar not found")
-    public Response updateCalendar(@PathParam("id") UUID id, CalendarRequest request) {
+    @APIResponse(responseCode = "400", description = "Invalid request",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "404", description = "Calendar not found",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public Response updateCalendar(
+            @Parameter(description = "Unique identifier of the calendar to update", required = true) @PathParam("id") UUID id,
+            CalendarRequest request) {
         try {
             Calendar calendar = calendarService.updateCalendar(id, request);
             return Response.ok(CalendarResponse.from(calendar)).build();
@@ -105,10 +114,12 @@ public class CalendarResource {
     @DELETE
     @Path("/{id}")
     @Transactional
-    @Operation(summary = "Deactivate calendar", description = "Deactivate a calendar (soft delete)")
+    @Operation(operationId = "deactivateCalendar", summary = "Deactivate calendar", description = "Soft-delete a calendar by setting it as inactive")
     @APIResponse(responseCode = "204", description = "Calendar deactivated")
-    @APIResponse(responseCode = "404", description = "Calendar not found")
-    public Response deactivateCalendar(@PathParam("id") UUID id) {
+    @APIResponse(responseCode = "404", description = "Calendar not found",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public Response deactivateCalendar(
+            @Parameter(description = "Unique identifier of the calendar to deactivate", required = true) @PathParam("id") UUID id) {
         try {
             calendarService.deactivateCalendar(id);
             return Response.noContent().build();
@@ -123,9 +134,11 @@ public class CalendarResource {
 
     @GET
     @Path("/{calendarId}/time-windows")
-    @Operation(summary = "List time windows", description = "Get time windows for a calendar")
-    @APIResponse(responseCode = "200", description = "List of time windows")
-    public Response listTimeWindows(@PathParam("calendarId") UUID calendarId) {
+    @Operation(operationId = "listTimeWindows", summary = "List time windows", description = "Retrieve all time windows configured for a specific calendar")
+    @APIResponse(responseCode = "200", description = "List of time windows",
+        content = @Content(schema = @Schema(implementation = TimeWindowResponse[].class)))
+    public Response listTimeWindows(
+            @Parameter(description = "Unique identifier of the calendar", required = true) @PathParam("calendarId") UUID calendarId) {
         List<TimeWindow> timeWindows = calendarService.getTimeWindows(calendarId);
         List<TimeWindowResponse> response = timeWindows.stream()
             .map(TimeWindowResponse::from)
@@ -136,12 +149,16 @@ public class CalendarResource {
     @POST
     @Path("/{calendarId}/time-windows")
     @Transactional
-    @Operation(summary = "Create time window", description = "Create a new time window for a calendar")
+    @Operation(operationId = "createTimeWindow", summary = "Create time window", description = "Create a new time window within a calendar to define when slots can be generated")
     @APIResponse(responseCode = "201", description = "Time window created",
         content = @Content(schema = @Schema(implementation = TimeWindowResponse.class)))
-    @APIResponse(responseCode = "400", description = "Invalid request")
-    @APIResponse(responseCode = "404", description = "Calendar not found")
-    public Response createTimeWindow(@PathParam("calendarId") UUID calendarId, TimeWindowRequest request) {
+    @APIResponse(responseCode = "400", description = "Invalid request",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "404", description = "Calendar not found",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public Response createTimeWindow(
+            @Parameter(description = "Unique identifier of the calendar", required = true) @PathParam("calendarId") UUID calendarId,
+            TimeWindowRequest request) {
         try {
             TimeWindow timeWindow = calendarService.createTimeWindow(calendarId, request);
             return Response.status(Response.Status.CREATED)
@@ -163,13 +180,16 @@ public class CalendarResource {
     @PUT
     @Path("/{calendarId}/time-windows/{timeWindowId}")
     @Transactional
-    @Operation(summary = "Update time window", description = "Update an existing time window")
+    @Operation(operationId = "updateTimeWindow", summary = "Update time window", description = "Update an existing time window's configuration")
     @APIResponse(responseCode = "200", description = "Time window updated",
         content = @Content(schema = @Schema(implementation = TimeWindowResponse.class)))
-    @APIResponse(responseCode = "404", description = "Time window not found")
+    @APIResponse(responseCode = "400", description = "Invalid request",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "404", description = "Time window not found",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     public Response updateTimeWindow(
-            @PathParam("calendarId") UUID calendarId,
-            @PathParam("timeWindowId") UUID timeWindowId,
+            @Parameter(description = "Unique identifier of the calendar", required = true) @PathParam("calendarId") UUID calendarId,
+            @Parameter(description = "Unique identifier of the time window to update", required = true) @PathParam("timeWindowId") UUID timeWindowId,
             TimeWindowRequest request) {
         try {
             TimeWindow timeWindow = calendarService.updateTimeWindow(timeWindowId, request);

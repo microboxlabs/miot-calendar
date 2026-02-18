@@ -1,13 +1,25 @@
 package com.microboxlabs.miot.calendar.model;
 
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
+
 /**
  * Request to create or update a calendar
  */
+@Schema(description = "Request payload to create or update a calendar")
 public record CalendarRequest(
+    @Schema(required = true, description = "Unique code identifying the calendar", examples = {"loading-dock-south"}, maxLength = 100)
     String code,
+
+    @Schema(required = true, description = "Display name of the calendar", examples = {"Loading Dock South"}, maxLength = 255)
     String name,
+
+    @Schema(description = "Detailed description of the calendar purpose", examples = {"Scheduling calendar for Loading Dock South"})
     String description,
+
+    @Schema(description = "IANA timezone identifier for the calendar", examples = {"America/Santiago"}, defaultValue = "UTC")
     String timezone,
+
+    @Schema(description = "Whether the calendar is active and accepting bookings", defaultValue = "true")
     Boolean active
 ) {
     /**

@@ -1,13 +1,21 @@
 package com.microboxlabs.miot.calendar.model;
 
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
+
 import java.time.LocalDate;
 
 /**
  * Slot data for requests and responses
  */
+@Schema(description = "Date and time identifying a specific slot")
 public record SlotData(
+    @Schema(required = true, description = "Date of the slot", format = "date", examples = {"2025-06-15"})
     LocalDate date,
+
+    @Schema(required = true, description = "Hour of the slot (0-23)", minimum = "0", maximum = "23", examples = {"10"})
     Integer hour,
+
+    @Schema(required = true, description = "Minutes of the slot (0 or 30)", minimum = "0", maximum = "59", examples = {"30"})
     Integer minutes
 ) {
     /**

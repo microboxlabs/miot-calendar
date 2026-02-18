@@ -27,7 +27,7 @@ import java.util.UUID;
 @Path("/api/v1/miot-calendar/bookings")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-@Tag(name = "Bookings", description = "Booking management endpoints")
+@Tag(name = "Bookings", description = "Booking creation, cancellation, and query operations")
 public class BookingResource {
 
     private static final Logger LOG = Logger.getLogger(BookingResource.class);
@@ -36,14 +36,14 @@ public class BookingResource {
     BookingService bookingService;
 
     @GET
-    @Operation(summary = "List bookings", description = "Get bookings filtered by calendar and date range")
+    @Operation(operationId = "listBookings", summary = "List bookings", description = "Retrieve bookings filtered by calendar and date range. Defaults to the next 30 days if no dates are provided.")
     @APIResponse(responseCode = "200", description = "List of bookings",
         content = @Content(schema = @Schema(implementation = BookingListResponse.class)))
     public Response listBookings(
-            @Parameter(description = "Calendar ID") @QueryParam("calendarId") UUID calendarId,
-            @Parameter(description = "Start date (ISO format)") @QueryParam("startDate") LocalDate startDate,
-            @Parameter(description = "End date (ISO format)") @QueryParam("endDate") LocalDate endDate) {
-        
+            @Parameter(description = "Filter bookings by calendar identifier", schema = @Schema(format = "uuid")) @QueryParam("calendarId") UUID calendarId,
+            @Parameter(description = "Start date of the range (inclusive, defaults to today)", schema = @Schema(format = "date")) @QueryParam("startDate") LocalDate startDate,
+            @Parameter(description = "End date of the range (inclusive, defaults to start + 30 days)", schema = @Schema(format = "date")) @QueryParam("endDate") LocalDate endDate) {
+
         // Default to today if no dates provided
         if (startDate == null) {
             startDate = LocalDate.now();
@@ -58,11 +58,13 @@ public class BookingResource {
 
     @GET
     @Path("/{id}")
-    @Operation(summary = "Get booking by ID", description = "Retrieve a specific booking")
+    @Operation(operationId = "getBooking", summary = "Get booking by ID", description = "Retrieve a specific booking by its unique identifier")
     @APIResponse(responseCode = "200", description = "Booking found",
         content = @Content(schema = @Schema(implementation = BookingResponse.class)))
-    @APIResponse(responseCode = "404", description = "Booking not found")
-    public Response getBooking(@PathParam("id") UUID id) {
+    @APIResponse(responseCode = "404", description = "Booking not found",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public Response getBooking(
+            @Parameter(description = "Unique identifier of the booking", required = true) @PathParam("id") UUID id) {
         return bookingService.getBookingById(id)
             .map(booking -> Response.ok(BookingResponse.from(booking)).build())
             .orElse(Response.status(Response.Status.NOT_FOUND)
@@ -72,13 +74,15 @@ public class BookingResource {
 
     @POST
     @Transactional
-    @Operation(summary = "Create booking", description = "Create a new resource booking")
+    @Operation(operationId = "createBooking", summary = "Create booking", description = "Create a new resource booking for a specific calendar and slot")
     @APIResponse(responseCode = "201", description = "Booking created",
         content = @Content(schema = @Schema(implementation = BookingResponse.class)))
-    @APIResponse(responseCode = "400", description = "Invalid request")
-    @APIResponse(responseCode = "409", description = "Booking conflict")
+    @APIResponse(responseCode = "400", description = "Invalid request",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "409", description = "Booking conflict (e.g., slot full or duplicate resource booking)",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     public Response createBooking(BookingRequest request,
-            @Parameter(description = "User creating the booking") @HeaderParam("X-User-Id") String userId) {
+            @Parameter(description = "Identifier of the user creating the booking") @HeaderParam("X-User-Id") String userId) {
         try {
             Booking booking = bookingService.createBooking(request, userId);
             return Response.status(Response.Status.CREATED)
@@ -100,10 +104,12 @@ public class BookingResource {
     @DELETE
     @Path("/{id}")
     @Transactional
-    @Operation(summary = "Cancel booking", description = "Cancel an existing booking")
+    @Operation(operationId = "cancelBooking", summary = "Cancel booking", description = "Cancel an existing booking and release the slot capacity")
     @APIResponse(responseCode = "204", description = "Booking cancelled")
-    @APIResponse(responseCode = "404", description = "Booking not found")
-    public Response cancelBooking(@PathParam("id") UUID id) {
+    @APIResponse(responseCode = "404", description = "Booking not found",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public Response cancelBooking(
+            @Parameter(description = "Unique identifier of the booking to cancel", required = true) @PathParam("id") UUID id) {
         try {
             bookingService.cancelBooking(id);
             return Response.noContent().build();
@@ -116,9 +122,11 @@ public class BookingResource {
 
     @GET
     @Path("/resource/{resourceId}")
-    @Operation(summary = "Get bookings by resource", description = "Get all bookings for a specific resource")
-    @APIResponse(responseCode = "200", description = "List of bookings")
-    public Response getBookingsByResource(@PathParam("resourceId") String resourceId) {
+    @Operation(operationId = "listBookingsByResource", summary = "Get bookings by resource", description = "Retrieve all bookings associated with a specific resource identifier")
+    @APIResponse(responseCode = "200", description = "List of bookings for the resource",
+        content = @Content(schema = @Schema(implementation = BookingListResponse.class)))
+    public Response getBookingsByResource(
+            @Parameter(description = "Identifier of the resource to get bookings for", required = true) @PathParam("resourceId") String resourceId) {
         List<Booking> bookings = bookingService.getBookingsByResourceId(resourceId);
         return Response.ok(BookingListResponse.from(bookings)).build();
     }
