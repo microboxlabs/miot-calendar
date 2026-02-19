@@ -35,14 +35,21 @@ public class CalendarResource {
     CalendarService calendarService;
 
     @GET
-    @Operation(operationId = "listCalendars", summary = "List calendars", description = "Retrieve all calendars, optionally filtered by active status")
+    @Transactional
+    @Operation(operationId = "listCalendars", summary = "List calendars", description = "Retrieve all calendars, optionally filtered by active status or group code")
     @APIResponse(responseCode = "200", description = "List of calendars",
         content = @Content(schema = @Schema(implementation = CalendarResponse[].class)))
     public Response listCalendars(
-            @Parameter(description = "When true, return only active calendars") @QueryParam("active") Boolean active) {
-        List<Calendar> calendars = active != null && active
-            ? calendarService.getActiveCalendars()
-            : calendarService.getAllCalendars();
+            @Parameter(description = "When true, return only active calendars") @QueryParam("active") Boolean active,
+            @Parameter(description = "Filter calendars belonging to this group code") @QueryParam("groupCode") String groupCode) {
+        List<Calendar> calendars;
+        if (groupCode != null && !groupCode.isBlank()) {
+            calendars = calendarService.getCalendarsByGroupCode(groupCode);
+        } else {
+            calendars = active != null && active
+                ? calendarService.getActiveCalendars()
+                : calendarService.getAllCalendars();
+        }
 
         List<CalendarResponse> response = calendars.stream()
             .map(CalendarResponse::from)
@@ -53,6 +60,7 @@ public class CalendarResource {
 
     @GET
     @Path("/{id}")
+    @Transactional
     @Operation(operationId = "getCalendar", summary = "Get calendar by ID", description = "Retrieve a specific calendar by its unique identifier")
     @APIResponse(responseCode = "200", description = "Calendar found",
         content = @Content(schema = @Schema(implementation = CalendarResponse.class)))
@@ -105,8 +113,13 @@ public class CalendarResource {
             Calendar calendar = calendarService.updateCalendar(id, request);
             return Response.ok(CalendarResponse.from(calendar)).build();
         } catch (IllegalArgumentException e) {
-            return Response.status(Response.Status.NOT_FOUND)
-                .entity(ErrorResponse.notFound(e.getMessage()))
+            if (e.getMessage().contains("not found")) {
+                return Response.status(Response.Status.NOT_FOUND)
+                    .entity(ErrorResponse.notFound(e.getMessage()))
+                    .build();
+            }
+            return Response.status(Response.Status.BAD_REQUEST)
+                .entity(ErrorResponse.badRequest(e.getMessage()))
                 .build();
         }
     }

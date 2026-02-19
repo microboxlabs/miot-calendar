@@ -1,10 +1,12 @@
 package com.microboxlabs.miot.calendar.service;
 
 import com.microboxlabs.miot.calendar.entity.Calendar;
+import com.microboxlabs.miot.calendar.entity.CalendarGroup;
 import com.microboxlabs.miot.calendar.entity.TimeWindow;
 import com.microboxlabs.miot.calendar.model.CalendarRequest;
 import com.microboxlabs.miot.calendar.model.TimeWindowRequest;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
@@ -20,9 +22,13 @@ public class CalendarService {
 
     private static final Logger LOG = Logger.getLogger(CalendarService.class);
 
+    @Inject
+    CalendarGroupService calendarGroupService;
+
     /**
      * Get all calendars
      */
+    @Transactional
     public List<Calendar> getAllCalendars() {
         return Calendar.listAll();
     }
@@ -30,6 +36,7 @@ public class CalendarService {
     /**
      * Get all active calendars
      */
+    @Transactional
     public List<Calendar> getActiveCalendars() {
         return Calendar.findAllActive();
     }
@@ -37,8 +44,17 @@ public class CalendarService {
     /**
      * Get calendar by ID
      */
+    @Transactional
     public Optional<Calendar> getCalendarById(UUID id) {
         return Optional.ofNullable(Calendar.findById(id));
+    }
+
+    /**
+     * Get active calendars belonging to a group
+     */
+    @Transactional
+    public List<Calendar> getCalendarsByGroupCode(String groupCode) {
+        return Calendar.findByGroupCode(groupCode);
     }
 
     /**
@@ -68,8 +84,13 @@ public class CalendarService {
         calendar.active = request.active() != null ? request.active() : true;
         
         calendar.persist();
+
+        if (request.groups() != null && !request.groups().isEmpty()) {
+            resolveAndAssignGroups(calendar, request.groups());
+        }
+
         LOG.infof("Created calendar: %s (%s)", calendar.name, calendar.code);
-        
+
         return calendar;
     }
 
@@ -105,6 +126,13 @@ public class CalendarService {
             calendar.active = request.active();
         }
 
+        if (request.groups() != null) {
+            calendar.groups.clear();
+            if (!request.groups().isEmpty()) {
+                resolveAndAssignGroups(calendar, request.groups());
+            }
+        }
+
         LOG.infof("Updated calendar: %s (%s)", calendar.name, calendar.code);
         return calendar;
     }
@@ -120,6 +148,19 @@ public class CalendarService {
         }
         calendar.active = false;
         LOG.infof("Deactivated calendar: %s (%s)", calendar.name, calendar.code);
+    }
+
+    /**
+     * Resolve group codes to entities and assign them to the calendar
+     */
+    private void resolveAndAssignGroups(Calendar calendar, List<String> groupCodes) {
+        for (String code : groupCodes) {
+            CalendarGroup group = CalendarGroup.findByCode(code);
+            if (group == null || !group.active) {
+                throw new IllegalArgumentException("Unknown or inactive group code: " + code);
+            }
+            calendar.groups.add(group);
+        }
     }
 
     // Time Window operations

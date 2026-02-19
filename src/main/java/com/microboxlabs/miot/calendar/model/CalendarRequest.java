@@ -2,6 +2,8 @@ package com.microboxlabs.miot.calendar.model;
 
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
+import java.util.List;
+
 /**
  * Request to create or update a calendar
  */
@@ -20,7 +22,10 @@ public record CalendarRequest(
     String timezone,
 
     @Schema(description = "Whether the calendar is active and accepting bookings", defaultValue = "true")
-    Boolean active
+    Boolean active,
+
+    @Schema(description = "List of group codes to assign. null = no change; [] = remove all; [\"code1\"] = replace all")
+    List<String> groups
 ) {
     /**
      * Validate the calendar request

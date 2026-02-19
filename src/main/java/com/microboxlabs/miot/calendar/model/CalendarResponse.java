@@ -4,6 +4,7 @@ import com.microboxlabs.miot.calendar.entity.Calendar;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.time.ZonedDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -33,12 +34,18 @@ public record CalendarResponse(
     ZonedDateTime createdAt,
 
     @Schema(required = true, description = "Timestamp when the calendar was last updated", format = "date-time")
-    ZonedDateTime updatedAt
+    ZonedDateTime updatedAt,
+
+    @Schema(description = "Groups this calendar belongs to")
+    List<CalendarGroupResponse> groups
 ) {
     /**
      * Create from entity
      */
     public static CalendarResponse from(Calendar calendar) {
+        List<CalendarGroupResponse> groupResponses = calendar.groups != null
+            ? calendar.groups.stream().map(CalendarGroupResponse::from).toList()
+            : List.of();
         return new CalendarResponse(
             calendar.id,
             calendar.code,
@@ -47,7 +54,8 @@ public record CalendarResponse(
             calendar.timezone,
             calendar.active,
             calendar.createdAt,
-            calendar.updatedAt
+            calendar.updatedAt,
+            groupResponses
         );
     }
 }

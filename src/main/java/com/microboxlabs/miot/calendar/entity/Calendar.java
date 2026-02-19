@@ -4,6 +4,7 @@ import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -47,6 +48,14 @@ public class Calendar extends PanacheEntityBase {
     @OneToMany(mappedBy = "calendar", cascade = CascadeType.ALL, orphanRemoval = true)
     public List<TimeWindow> timeWindows;
 
+    @ManyToMany(fetch = FetchType.LAZY, cascade = {})
+    @JoinTable(
+        name = "cld_calendar_group_members",
+        joinColumns        = @JoinColumn(name = "calendar_id"),
+        inverseJoinColumns = @JoinColumn(name = "group_id")
+    )
+    public List<CalendarGroup> groups = new ArrayList<>();
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {
@@ -81,5 +90,15 @@ public class Calendar extends PanacheEntityBase {
      */
     public static Calendar findById(UUID id) {
         return find("id", id).firstResult();
+    }
+
+    /**
+     * Find all active calendars belonging to the given group code
+     */
+    public static List<Calendar> findByGroupCode(String groupCode) {
+        return list(
+            "SELECT c FROM Calendar c JOIN c.groups g WHERE g.code = ?1 AND c.active = true",
+            groupCode
+        );
     }
 }
