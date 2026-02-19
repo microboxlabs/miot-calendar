@@ -6,6 +6,7 @@ A Quarkus-based microservice for calendar booking and resource scheduling.
 
 MIOT Calendar provides a generic, database-first calendar solution for booking resources into time slots. It supports:
 
+- **Calendar Groups** for organizing calendars into flat, reusable labels (many-to-many)
 - **Multiple calendars** with independent configurations
 - **Time windows** defining when slots are available
 - **Materialized slots** for fast queries and availability checks
@@ -56,11 +57,21 @@ The application will:
 
 ## API Endpoints
 
+### Calendar Groups
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/miot-calendar/groups` | List all groups (`?active=true` filter) |
+| GET | `/api/v1/miot-calendar/groups/{id}` | Get group by ID |
+| POST | `/api/v1/miot-calendar/groups` | Create group |
+| PUT | `/api/v1/miot-calendar/groups/{id}` | Update group |
+| DELETE | `/api/v1/miot-calendar/groups/{id}` | Deactivate group (soft-delete) |
+
 ### Calendars
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/miot-calendar/calendars` | List all calendars |
+| GET | `/api/v1/miot-calendar/calendars` | List all calendars (`?active=true`, `?groupCode=X` filters) |
 | GET | `/api/v1/miot-calendar/calendars/{id}` | Get calendar by ID |
 | POST | `/api/v1/miot-calendar/calendars` | Create calendar |
 | PUT | `/api/v1/miot-calendar/calendars/{id}` | Update calendar |
@@ -97,6 +108,8 @@ The application will:
 
 All tables are prefixed with `cld_` (calendar domain):
 
+- `cld_calendar_groups` - Group labels (tags) for organizing calendars
+- `cld_calendar_group_members` - Many-to-many: calendar ↔ group assignments
 - `cld_calendars` - Calendar configurations
 - `cld_time_windows` - Time window definitions
 - `cld_slots` - Materialized booking slots
@@ -140,6 +153,17 @@ docker build -f src/main/docker/Dockerfile.native -t miot-calendar:native .
 
 ## Example Usage
 
+### 0. Create a Calendar Group
+
+```bash
+curl -X POST http://localhost:8083/api/v1/miot-calendar/groups \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "warehouse-south",
+    "name": "Warehouse South"
+  }'
+```
+
 ### 1. Create a Calendar
 
 ```bash
@@ -148,7 +172,8 @@ curl -X POST http://localhost:8083/api/v1/miot-calendar/calendars \
   -d '{
     "code": "despacho-santiago",
     "name": "Despacho Santiago",
-    "timezone": "America/Santiago"
+    "timezone": "America/Santiago",
+    "groups": ["warehouse-south"]
   }'
 ```
 
