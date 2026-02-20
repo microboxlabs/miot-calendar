@@ -34,11 +34,14 @@ public class SlotManagerResource {
 
     private static final Logger LOG = Logger.getLogger(SlotManagerResource.class);
 
-    @Inject
-    SlotManagerService slotManagerService;
+    private final SlotManagerService slotManagerService;
+    private final SlotManagerExecutor slotManagerExecutor;
 
     @Inject
-    SlotManagerExecutor slotManagerExecutor;
+    public SlotManagerResource(SlotManagerService slotManagerService, SlotManagerExecutor slotManagerExecutor) {
+        this.slotManagerService = slotManagerService;
+        this.slotManagerExecutor = slotManagerExecutor;
+    }
 
     // ── Manager CRUD ───────────────────────────────────────────────────────
 

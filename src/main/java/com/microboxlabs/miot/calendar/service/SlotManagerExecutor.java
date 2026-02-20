@@ -34,11 +34,14 @@ public class SlotManagerExecutor {
 
     private static final Logger LOG = Logger.getLogger(SlotManagerExecutor.class);
 
-    @Inject
-    SlotGeneratorService slotGeneratorService;
+    private final SlotGeneratorService slotGeneratorService;
+    private final SlotManagerService slotManagerService;
 
     @Inject
-    SlotManagerService slotManagerService;
+    public SlotManagerExecutor(SlotGeneratorService slotGeneratorService, SlotManagerService slotManagerService) {
+        this.slotGeneratorService = slotGeneratorService;
+        this.slotManagerService = slotManagerService;
+    }
 
     /**
      * Run all active managers.
@@ -80,7 +83,8 @@ public class SlotManagerExecutor {
         SlotManagerSnapshot snap = loadSnapshot(managerId);
 
         // Determine date range
-        LocalDate from, to;
+        LocalDate from;
+        LocalDate to;
         boolean isReprocess = snap.reprocessFrom() != null && snap.reprocessTo() != null;
         if (isReprocess) {
             from = snap.reprocessFrom();
@@ -98,18 +102,19 @@ public class SlotManagerExecutor {
         UUID runId = runEntity.id;
 
         if (from.isAfter(to)) {
-            slotManagerService.completeRun(runId, managerId, RunStatus.SKIPPED,
-                0, 0, null, null,
-                "Already generated through " + snap.generatedThrough());
+            slotManagerService.completeRun(runId, managerId, new SlotManagerService.RunOutcome(
+                RunStatus.SKIPPED, 0, 0, null, null,
+                "Already generated through " + snap.generatedThrough()));
             return loadRunResponse(runId);
         }
 
         // Generate in batches — each call is its own transaction
-        int totalCreated = 0, totalSkipped = 0;
+        int totalCreated = 0;
+        int totalSkipped = 0;
         try {
             LocalDate batchStart = from;
             while (!batchStart.isAfter(to)) {
-                LocalDate batchEnd = batchStart.plusDays(snap.batchDays() - 1);
+                LocalDate batchEnd = batchStart.plusDays(snap.batchDays() - 1L);
                 if (batchEnd.isAfter(to)) batchEnd = to;
 
                 GenerateSlotsResponse resp = slotGeneratorService.generateSlots(
@@ -120,15 +125,15 @@ public class SlotManagerExecutor {
                 batchStart = batchEnd.plusDays(1);
             }
 
-            slotManagerService.completeRun(runId, managerId, RunStatus.SUCCESS,
-                totalCreated, totalSkipped, from, to, null);
+            slotManagerService.completeRun(runId, managerId, new SlotManagerService.RunOutcome(
+                RunStatus.SUCCESS, totalCreated, totalSkipped, from, to, null));
 
             LOG.infof("Slot manager SUCCESS [%s]: created=%d skipped=%d from=%s through=%s",
                 snap.calendarCode(), totalCreated, totalSkipped, from, to);
 
         } catch (Exception e) {
-            slotManagerService.completeRun(runId, managerId, RunStatus.FAILED,
-                totalCreated, totalSkipped, from, null, e.getMessage());
+            slotManagerService.completeRun(runId, managerId, new SlotManagerService.RunOutcome(
+                RunStatus.FAILED, totalCreated, totalSkipped, from, null, e.getMessage()));
             LOG.errorf(e, "Slot manager FAILED [%s]", snap.calendarCode());
         }
 
@@ -145,6 +150,7 @@ public class SlotManagerExecutor {
     }
 
     @Transactional
+    @SuppressWarnings("java:S3252")
     SlotManagerSnapshot loadSnapshot(UUID managerId) {
         SlotManager m = SlotManager.findById(managerId);
         if (m == null) throw new IllegalArgumentException("Slot manager not found: " + managerId);
@@ -157,6 +163,7 @@ public class SlotManagerExecutor {
     }
 
     @Transactional
+    @SuppressWarnings("java:S3252")
     SlotManagerRunResponse loadRunResponse(UUID runId) {
         SlotManagerRun run = SlotManagerRun.findById(runId);
         return SlotManagerRunResponse.from(run);

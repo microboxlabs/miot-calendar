@@ -29,6 +29,7 @@ public class SlotManagerService {
     // ── Read ──────────────────────────────────────────────────────────────
 
     @Transactional
+    @SuppressWarnings("java:S3252")
     public List<SlotManager> getAllManagers() {
         return SlotManager.listAll();
     }
@@ -39,6 +40,7 @@ public class SlotManagerService {
     }
 
     @Transactional
+    @SuppressWarnings("java:S3252")
     public Optional<SlotManager> getManagerById(UUID id) {
         return Optional.ofNullable(SlotManager.findById(id));
     }
@@ -81,7 +83,7 @@ public class SlotManagerService {
 
         SlotManager manager = new SlotManager();
         manager.calendar = calendar;
-        manager.active = request.active() != null ? request.active() : true;
+        manager.active = request.active() == null || request.active();
         manager.daysInAdvance = request.daysInAdvance() != null ? request.daysInAdvance() : 30;
         manager.batchDays = request.batchDays() != null ? request.batchDays() : 7;
         manager.reprocessFrom = request.reprocessFrom();
@@ -93,6 +95,7 @@ public class SlotManagerService {
     }
 
     @Transactional
+    @SuppressWarnings("java:S3252")
     public SlotManager updateManager(UUID id, SlotManagerRequest request) {
         request.validateUpdate();
 
@@ -116,6 +119,7 @@ public class SlotManagerService {
     }
 
     @Transactional
+    @SuppressWarnings("java:S3252")
     public void deactivateManager(UUID id) {
         SlotManager manager = SlotManager.findById(id);
         if (manager == null) {
@@ -132,6 +136,7 @@ public class SlotManagerService {
      * Must be called at the start of each manager execution.
      */
     @Transactional
+    @SuppressWarnings("java:S3252")
     public SlotManagerRun beginRun(UUID managerId, String triggeredBy) {
         SlotManager manager = SlotManager.findById(managerId);
 
@@ -150,31 +155,35 @@ public class SlotManagerService {
     }
 
     /**
+     * Immutable outcome of a slot manager run, passed to {@link #completeRun}.
+     */
+    public record RunOutcome(RunStatus status, int slotsCreated, int slotsSkipped,
+                             LocalDate generatedFrom, LocalDate generatedThrough,
+                             String errorMessage) {}
+
+    /**
      * Closes a run record with the given outcome and updates manager state.
      */
     @Transactional
-    public void completeRun(UUID runId, UUID managerId, RunStatus status,
-                            int slotsCreated, int slotsSkipped,
-                            LocalDate generatedFrom, LocalDate generatedThrough,
-                            String errorMessage) {
-
+    @SuppressWarnings("java:S3252")
+    public void completeRun(UUID runId, UUID managerId, RunOutcome outcome) {
         SlotManagerRun run = SlotManagerRun.findById(runId);
         run.finishedAt = ZonedDateTime.now();
-        run.status = status;
-        run.slotsCreated = slotsCreated;
-        run.slotsSkipped = slotsSkipped;
-        run.generatedFrom = generatedFrom;
-        run.generatedThrough = generatedThrough;
-        run.errorMessage = errorMessage;
+        run.status = outcome.status();
+        run.slotsCreated = outcome.slotsCreated();
+        run.slotsSkipped = outcome.slotsSkipped();
+        run.generatedFrom = outcome.generatedFrom();
+        run.generatedThrough = outcome.generatedThrough();
+        run.errorMessage = outcome.errorMessage();
 
         SlotManager manager = SlotManager.findById(managerId);
-        manager.lastRunStatus = status;
-        manager.lastRunError = errorMessage;
+        manager.lastRunStatus = outcome.status();
+        manager.lastRunError = outcome.errorMessage();
 
-        if (status == RunStatus.SUCCESS && generatedThrough != null) {
+        if (outcome.status() == RunStatus.SUCCESS && outcome.generatedThrough() != null) {
             // Advance the watermark and clear any pending reprocess window
-            if (manager.generatedThrough == null || generatedThrough.isAfter(manager.generatedThrough)) {
-                manager.generatedThrough = generatedThrough;
+            if (manager.generatedThrough == null || outcome.generatedThrough().isAfter(manager.generatedThrough)) {
+                manager.generatedThrough = outcome.generatedThrough();
             }
             if (manager.reprocessFrom != null) {
                 manager.reprocessFrom = null;

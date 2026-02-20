@@ -37,8 +37,12 @@ public class SlotManagerScheduler {
 
     private static final Logger LOG = Logger.getLogger(SlotManagerScheduler.class);
 
+    private final SlotManagerExecutor executor;
+
     @Inject
-    SlotManagerExecutor executor;
+    public SlotManagerScheduler(SlotManagerExecutor executor) {
+        this.executor = executor;
+    }
 
     @Scheduled(
         cron              = "${miot-calendar.slot-manager.cron:0 0 * * * ?}",

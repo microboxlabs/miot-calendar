@@ -29,8 +29,12 @@ public class Main implements QuarkusApplication {
 
     private static final Logger LOG = Logger.getLogger(Main.class);
 
+    private final SlotManagerExecutor slotManagerExecutor;
+
     @Inject
-    SlotManagerExecutor slotManagerExecutor;
+    public Main(SlotManagerExecutor slotManagerExecutor) {
+        this.slotManagerExecutor = slotManagerExecutor;
+    }
 
     @Override
     public int run(String... args) {
