@@ -1,0 +1,24 @@
+meta {
+  name: Update Group
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/v1/miot-calendar/groups/{{calendarGroupId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "code": "warehouse-south",
+    "name": "Warehouse South",
+    "description": "Updated description",
+    "active": true
+  }
+}

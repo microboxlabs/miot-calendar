@@ -1,0 +1,11 @@
+meta {
+  name: Deactivate Calendar
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/miot-calendar/calendars/{{calendarId}}
+  body: none
+  auth: none
+}

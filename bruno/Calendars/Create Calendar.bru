@@ -1,0 +1,25 @@
+meta {
+  name: Create Calendar
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/miot-calendar/calendars
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "code": "loading-dock-south",
+    "name": "Loading Dock South",
+    "description": "Loading dock scheduling calendar",
+    "timezone": "America/Santiago",
+    "groups": ["warehouse-south"]
+  }
+}

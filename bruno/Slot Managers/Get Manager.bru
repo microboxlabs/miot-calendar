@@ -1,0 +1,11 @@
+meta {
+  name: Get Manager
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/miot-calendar/slot-managers/{{slotManagerId}}
+  body: none
+  auth: none
+}

@@ -1,0 +1,15 @@
+meta {
+  name: List Manager Runs
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/v1/miot-calendar/slot-managers/{{slotManagerId}}/runs
+  body: none
+  auth: none
+}
+
+params:query {
+  ~limit: 20
+}

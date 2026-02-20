@@ -1,0 +1,23 @@
+meta {
+  name: Create Manager
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/miot-calendar/slot-managers
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "calendarId": "{{calendarId}}",
+    "daysInAdvance": 30,
+    "batchDays": 7
+  }
+}

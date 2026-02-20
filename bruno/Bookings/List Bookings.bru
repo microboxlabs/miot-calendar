@@ -1,0 +1,17 @@
+meta {
+  name: List Bookings
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/miot-calendar/bookings
+  body: none
+  auth: none
+}
+
+params:query {
+  calendarId: {{calendarId}}
+  startDate: 2025-01-01
+  endDate: 2025-01-31
+}

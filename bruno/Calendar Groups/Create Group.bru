@@ -1,0 +1,23 @@
+meta {
+  name: Create Group
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/miot-calendar/groups
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "code": "warehouse-south",
+    "name": "Warehouse South",
+    "description": "Group for all calendars in Warehouse South"
+  }
+}

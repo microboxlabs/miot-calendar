@@ -1,0 +1,21 @@
+meta {
+  name: Update Slot Status
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/miot-calendar/slots/{{slotId}}/status
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "status": "CLOSED"
+  }
+}
