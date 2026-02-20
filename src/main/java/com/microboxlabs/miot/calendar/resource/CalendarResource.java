@@ -19,6 +19,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -52,8 +53,11 @@ public class CalendarResource {
                 : calendarService.getAllCalendars();
         }
 
+        Set<UUID> idsWithManager = SlotManager.findCalendarIdsWithManager(
+            calendars.stream().map(c -> c.id).toList());
+
         List<CalendarResponse> response = calendars.stream()
-            .map(c -> CalendarResponse.from(c, hasSlotManager(c.id)))
+            .map(c -> CalendarResponse.from(c, idsWithManager.contains(c.id)))
             .toList();
 
         return Response.ok(response).build();

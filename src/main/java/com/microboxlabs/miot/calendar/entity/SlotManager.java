@@ -7,7 +7,9 @@ import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * SlotManager Entity
@@ -86,5 +88,15 @@ public class SlotManager extends PanacheEntityBase {
 
     public static List<SlotManager> findAllActive() {
         return list("active", true);
+    }
+
+    public static Set<UUID> findCalendarIdsWithManager(List<UUID> calendarIds) {
+        if (calendarIds == null || calendarIds.isEmpty()) {
+            return Set.of();
+        }
+        return find("calendar.id in ?1", calendarIds)
+            .<SlotManager>stream()
+            .map(sm -> sm.calendar.id)
+            .collect(Collectors.toSet());
     }
 }
