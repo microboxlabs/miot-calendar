@@ -1,5 +1,6 @@
 package com.microboxlabs.miot.calendar;
 
+import com.microboxlabs.miot.calendar.model.RunStatus;
 import com.microboxlabs.miot.calendar.service.SlotManagerExecutor;
 import io.quarkus.runtime.Quarkus;
 import io.quarkus.runtime.QuarkusApplication;
@@ -43,7 +44,7 @@ public class Main implements QuarkusApplication {
             try {
                 var results = slotManagerExecutor.runAll("CLI");
                 long failed = results.stream()
-                    .filter(r -> "FAILED".equals(r.status()))
+                    .filter(r -> RunStatus.FAILED.name().equals(r.status()))
                     .count();
                 LOG.infof("CLI mode complete: %d manager(s) run, %d failed", results.size(), failed);
                 return failed > 0 ? 1 : 0;
