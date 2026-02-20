@@ -25,7 +25,10 @@ public record CalendarRequest(
     Boolean active,
 
     @Schema(description = "List of group codes to assign. null = no change; [] = remove all; [\"code1\"] = replace all")
-    List<String> groups
+    List<String> groups,
+
+    @Schema(description = "Whether to auto-provision a default SlotManager on creation. Defaults to true when null.", defaultValue = "true")
+    Boolean autoSlotManager
 ) {
     /**
      * Validate the calendar request

@@ -1,6 +1,7 @@
 package com.microboxlabs.miot.calendar.resource;
 
 import com.microboxlabs.miot.calendar.entity.Calendar;
+import com.microboxlabs.miot.calendar.entity.SlotManager;
 import com.microboxlabs.miot.calendar.entity.TimeWindow;
 import com.microboxlabs.miot.calendar.model.*;
 import com.microboxlabs.miot.calendar.service.CalendarService;
@@ -52,7 +53,7 @@ public class CalendarResource {
         }
 
         List<CalendarResponse> response = calendars.stream()
-            .map(CalendarResponse::from)
+            .map(c -> CalendarResponse.from(c, hasSlotManager(c.id)))
             .toList();
 
         return Response.ok(response).build();
@@ -69,7 +70,7 @@ public class CalendarResource {
     public Response getCalendar(
             @Parameter(description = "Unique identifier of the calendar", required = true) @PathParam("id") UUID id) {
         return calendarService.getCalendarById(id)
-            .map(calendar -> Response.ok(CalendarResponse.from(calendar)).build())
+            .map(calendar -> Response.ok(CalendarResponse.from(calendar, hasSlotManager(calendar.id))).build())
             .orElse(Response.status(Response.Status.NOT_FOUND)
                 .entity(ErrorResponse.notFound("Calendar not found: " + id))
                 .build());
@@ -86,7 +87,7 @@ public class CalendarResource {
         try {
             Calendar calendar = calendarService.createCalendar(request);
             return Response.status(Response.Status.CREATED)
-                .entity(CalendarResponse.from(calendar))
+                .entity(CalendarResponse.from(calendar, hasSlotManager(calendar.id)))
                 .build();
         } catch (IllegalArgumentException e) {
             LOG.warnf("Invalid calendar request: %s", e.getMessage());
@@ -111,7 +112,7 @@ public class CalendarResource {
             CalendarRequest request) {
         try {
             Calendar calendar = calendarService.updateCalendar(id, request);
-            return Response.ok(CalendarResponse.from(calendar)).build();
+            return Response.ok(CalendarResponse.from(calendar, hasSlotManager(calendar.id))).build();
         } catch (IllegalArgumentException e) {
             if (e.getMessage().contains("not found")) {
                 return Response.status(Response.Status.NOT_FOUND)
@@ -141,6 +142,10 @@ public class CalendarResource {
                 .entity(ErrorResponse.notFound(e.getMessage()))
                 .build();
         }
+    }
+
+    private boolean hasSlotManager(UUID calendarId) {
+        return SlotManager.findByCalendarId(calendarId) != null;
     }
 
     // Time Window endpoints

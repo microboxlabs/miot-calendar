@@ -129,6 +129,44 @@ public class SlotManagerService {
         LOG.infof("Deactivated slot manager %s for calendar %s", id, manager.calendar.code);
     }
 
+    // ── Auto-provision helpers (package-private, called by CalendarService) ──
+
+    /**
+     * Creates a default SlotManager for the given calendar.
+     * Guards against duplicates via findByCalendarId.
+     */
+    @Transactional
+    SlotManager createDefaultManager(Calendar calendar) {
+        if (SlotManager.findByCalendarId(calendar.id) != null) {
+            LOG.warnf("Slot manager already exists for calendar %s, skipping auto-provision", calendar.code);
+            return SlotManager.findByCalendarId(calendar.id);
+        }
+
+        SlotManager manager = new SlotManager();
+        manager.calendar = calendar;
+        manager.active = true;
+        manager.daysInAdvance = 30;
+        manager.batchDays = 7;
+        manager.persist();
+
+        LOG.infof("Auto-provisioned slot manager for calendar %s", calendar.code);
+        return manager;
+    }
+
+    /**
+     * Deactivates the SlotManager for the given calendar, if one exists.
+     * Returns silently if none exists (handles calendars created with autoSlotManager=false).
+     */
+    @Transactional
+    void deactivateManagerByCalendarId(UUID calendarId) {
+        SlotManager manager = SlotManager.findByCalendarId(calendarId);
+        if (manager == null) {
+            return;
+        }
+        manager.active = false;
+        LOG.infof("Deactivated slot manager for calendar %s", manager.calendar.code);
+    }
+
     // ── Run lifecycle ─────────────────────────────────────────────────────
 
     /**
