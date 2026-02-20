@@ -53,6 +53,7 @@ class CalendarResourceTest {
             .body("code", equalTo("test-calendar"))
             .body("name", equalTo("Test Calendar"))
             .body("active", equalTo(true))
+            .body("hasSlotManager", equalTo(true))
             .extract()
             .path("id");
     }
@@ -76,7 +77,8 @@ class CalendarResourceTest {
             .get("/api/v1/miot-calendar/calendars/" + calendarId)
             .then()
             .statusCode(200)
-            .body("code", equalTo("test-calendar"));
+            .body("code", equalTo("test-calendar"))
+            .body("hasSlotManager", equalTo(true));
     }
 
     @Test
@@ -93,7 +95,8 @@ class CalendarResourceTest {
             .put("/api/v1/miot-calendar/calendars/" + calendarId)
             .then()
             .statusCode(200)
-            .body("name", equalTo("Updated Test Calendar"));
+            .body("name", equalTo("Updated Test Calendar"))
+            .body("hasSlotManager", equalTo(true));
     }
 
     @Test
@@ -147,7 +150,28 @@ class CalendarResourceTest {
             .get("/api/v1/miot-calendar/calendars/" + calendarId)
             .then()
             .statusCode(200)
-            .body("active", equalTo(false));
+            .body("active", equalTo(false))
+            .body("hasSlotManager", equalTo(true));
+    }
+
+    @Test
+    void testCreateCalendarWithoutAutoSlotManager() {
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "code": "no-auto-mgr",
+                    "name": "No Auto Manager",
+                    "timezone": "UTC",
+                    "autoSlotManager": false
+                }
+                """)
+            .when()
+            .post("/api/v1/miot-calendar/calendars")
+            .then()
+            .statusCode(201)
+            .body("code", equalTo("no-auto-mgr"))
+            .body("hasSlotManager", equalTo(false));
     }
 
     @Test

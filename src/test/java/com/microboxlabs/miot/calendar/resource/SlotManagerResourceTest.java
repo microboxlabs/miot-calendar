@@ -42,7 +42,8 @@ class SlotManagerResourceTest {
                 {
                     "code": "mgr-test-calendar",
                     "name": "Manager Test Calendar",
-                    "timezone": "America/Santiago"
+                    "timezone": "America/Santiago",
+                    "autoSlotManager": false
                 }
                 """)
             .when()

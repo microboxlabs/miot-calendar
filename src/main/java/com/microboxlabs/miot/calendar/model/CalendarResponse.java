@@ -37,12 +37,15 @@ public record CalendarResponse(
     ZonedDateTime updatedAt,
 
     @Schema(description = "Groups this calendar belongs to")
-    List<CalendarGroupResponse> groups
+    List<CalendarGroupResponse> groups,
+
+    @Schema(description = "Whether this calendar has a SlotManager provisioned")
+    Boolean hasSlotManager
 ) {
     /**
      * Create from entity
      */
-    public static CalendarResponse from(Calendar calendar) {
+    public static CalendarResponse from(Calendar calendar, boolean hasSlotManager) {
         List<CalendarGroupResponse> groupResponses = calendar.groups != null
             ? calendar.groups.stream().map(CalendarGroupResponse::from).toList()
             : List.of();
@@ -55,7 +58,8 @@ public record CalendarResponse(
             calendar.active,
             calendar.createdAt,
             calendar.updatedAt,
-            groupResponses
+            groupResponses,
+            hasSlotManager
         );
     }
 }

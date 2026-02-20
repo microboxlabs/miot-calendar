@@ -25,6 +25,13 @@ public class CalendarService {
     @Inject
     CalendarGroupService calendarGroupService;
 
+    private final SlotManagerService slotManagerService;
+
+    @Inject
+    public CalendarService(SlotManagerService slotManagerService) {
+        this.slotManagerService = slotManagerService;
+    }
+
     /**
      * Get all calendars
      */
@@ -89,6 +96,12 @@ public class CalendarService {
             resolveAndAssignGroups(calendar, request.groups());
         }
 
+        // Auto-provision SlotManager (defaults to true when null)
+        boolean autoSlotManager = request.autoSlotManager() == null || request.autoSlotManager();
+        if (autoSlotManager) {
+            slotManagerService.createDefaultManager(calendar);
+        }
+
         LOG.infof("Created calendar: %s (%s)", calendar.name, calendar.code);
 
         return calendar;
@@ -147,6 +160,7 @@ public class CalendarService {
             throw new IllegalArgumentException("Calendar not found: " + id);
         }
         calendar.active = false;
+        slotManagerService.deactivateManagerByCalendarId(id);
         LOG.infof("Deactivated calendar: %s (%s)", calendar.name, calendar.code);
     }
 
