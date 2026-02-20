@@ -3,6 +3,7 @@ package com.microboxlabs.miot.calendar.resource;
 import io.quarkus.test.common.http.TestHTTPEndpoint;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.security.TestSecurity;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.BeforeAll;
@@ -21,6 +22,7 @@ import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.Matchers.greaterThan;
 
 @QuarkusTest
+@TestSecurity(user = "test-user", roles = {})
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BookingResourceTest {
@@ -103,7 +105,6 @@ class BookingResourceTest {
     void testCreateBooking() {
         bookingId = given()
             .contentType(ContentType.JSON)
-            .header("X-User-Id", "test-user")
             .body(String.format("""
                 {
                     "calendarId": "%s",
