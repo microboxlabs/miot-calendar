@@ -4,8 +4,6 @@ import com.microboxlabs.miot.calendar.entity.Booking;
 import com.microboxlabs.miot.calendar.model.*;
 import com.microboxlabs.miot.calendar.service.BookingService;
 import com.microboxlabs.miot.calendar.validation.BookingValidationService.BookingValidationException;
-import io.quarkus.security.Authenticated;
-import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -16,7 +14,6 @@ import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
-import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
@@ -31,17 +28,12 @@ import java.util.UUID;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(name = "Bookings", description = "Booking creation, cancellation, and query operations")
-@Authenticated
-@SecurityRequirement(name = "BearerAuth")
 public class BookingResource {
 
     private static final Logger LOG = Logger.getLogger(BookingResource.class);
 
     @Inject
     BookingService bookingService;
-
-    @Inject
-    SecurityIdentity securityIdentity;
 
     @GET
     @Operation(operationId = "listBookings", summary = "List bookings", description = "Retrieve bookings filtered by calendar and date range. Defaults to the next 30 days if no dates are provided.")
@@ -89,8 +81,8 @@ public class BookingResource {
         content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @APIResponse(responseCode = "409", description = "Booking conflict (e.g., slot full or duplicate resource booking)",
         content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    public Response createBooking(BookingRequest request) {
-        String userId = securityIdentity.getPrincipal().getName();
+    public Response createBooking(BookingRequest request,
+            @Parameter(description = "Identifier of the user creating the booking") @HeaderParam("X-User-Id") String userId) {
         try {
             Booking booking = bookingService.createBooking(request, userId);
             return Response.status(Response.Status.CREATED)

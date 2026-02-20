@@ -8,7 +8,6 @@ import com.microboxlabs.miot.calendar.model.SlotManagerResponse;
 import com.microboxlabs.miot.calendar.model.SlotManagerRunResponse;
 import com.microboxlabs.miot.calendar.service.SlotManagerExecutor;
 import com.microboxlabs.miot.calendar.service.SlotManagerService;
-import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -18,7 +17,6 @@ import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
-import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
@@ -32,8 +30,6 @@ import java.util.UUID;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(name = "Slot Managers", description = "Automatic slot generation manager configuration and triggers")
-@Authenticated
-@SecurityRequirement(name = "BearerAuth")
 public class SlotManagerResource {
 
     private static final Logger LOG = Logger.getLogger(SlotManagerResource.class);
