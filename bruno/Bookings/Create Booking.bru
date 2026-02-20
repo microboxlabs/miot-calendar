@@ -1,0 +1,36 @@
+meta {
+  name: Create Booking
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/miot-calendar/bookings
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  X-User-Id: operator1
+}
+
+body:json {
+  {
+    "calendarId": "{{calendarId}}",
+    "resource": {
+      "id": "truck-4521",
+      "type": "truck",
+      "label": "Truck AB-1234",
+      "data": {
+        "driver": "Juan Pérez",
+        "plate": "AB-1234"
+      }
+    },
+    "slot": {
+      "date": "2025-01-15",
+      "hour": 10,
+      "minutes": 30
+    }
+  }
+}

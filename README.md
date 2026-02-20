@@ -50,6 +50,17 @@ The application will:
 - **Swagger UI**: http://localhost:8083/swagger-ui
 - **OpenAPI Spec**: http://localhost:8083/openapi
 
+### Bruno Collection
+
+A [Bruno](https://www.usebruno.com/) collection covering every endpoint is in the `bruno/` directory.
+
+```bash
+# Open Bruno and import the collection
+# File → Open Collection → select the bruno/ folder
+```
+
+Set up the `Local` environment with your `calendarId`, `slotManagerId`, etc. after creating resources. All ID variables start empty — populate them as you work through the flows.
+
 ### Health Checks
 
 - **Liveness**: http://localhost:8083/q/health/live
@@ -94,6 +105,20 @@ The application will:
 | POST | `/api/v1/miot-calendar/slots/generate` | Generate slots for date range |
 | PATCH | `/api/v1/miot-calendar/slots/{id}/status` | Update slot status |
 
+### Slot Managers
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/miot-calendar/slot-managers` | List managers (`?active=true` filter) |
+| GET | `/api/v1/miot-calendar/slot-managers/{id}` | Get manager by ID |
+| POST | `/api/v1/miot-calendar/slot-managers` | Create manager |
+| PUT | `/api/v1/miot-calendar/slot-managers/{id}` | Update manager (or schedule reprocess window) |
+| DELETE | `/api/v1/miot-calendar/slot-managers/{id}` | Deactivate manager (soft-delete) |
+| POST | `/api/v1/miot-calendar/slot-managers/run` | Trigger all active managers |
+| POST | `/api/v1/miot-calendar/slot-managers/{id}/run` | Trigger one manager |
+| GET | `/api/v1/miot-calendar/slot-managers/runs` | List recent runs across all managers (`?limit=50`) |
+| GET | `/api/v1/miot-calendar/slot-managers/{id}/runs` | List runs for a specific manager (`?limit=20`) |
+
 ### Bookings
 
 | Method | Endpoint | Description |
@@ -113,6 +138,8 @@ All tables are prefixed with `cld_` (calendar domain):
 - `cld_calendars` - Calendar configurations
 - `cld_time_windows` - Time window definitions
 - `cld_slots` - Materialized booking slots
+- `cld_slot_managers` - Automatic slot generation configuration (one per calendar)
+- `cld_slot_manager_runs` - Slot manager execution history
 - `cld_bookings` - Resource bookings with JSONB data
 
 ## Configuration
@@ -193,7 +220,7 @@ curl -X POST http://localhost:8083/api/v1/miot-calendar/calendars/{calendarId}/t
   }'
 ```
 
-### 3. Generate Slots
+### 3a. Generate Slots (manual, one-off)
 
 ```bash
 curl -X POST http://localhost:8083/api/v1/miot-calendar/slots/generate \
@@ -202,6 +229,37 @@ curl -X POST http://localhost:8083/api/v1/miot-calendar/slots/generate \
     "calendarId": "{calendarId}",
     "startDate": "2025-01-01",
     "endDate": "2025-01-31"
+  }'
+```
+
+### 3b. Automatic Slot Generation (Slot Manager)
+
+Create a manager — it runs hourly and keeps slots generated `daysInAdvance` days ahead:
+
+```bash
+curl -X POST http://localhost:8083/api/v1/miot-calendar/slot-managers \
+  -H "Content-Type: application/json" \
+  -d '{
+    "calendarId": "{calendarId}",
+    "daysInAdvance": 30,
+    "batchDays": 7
+  }'
+```
+
+Trigger a run manually (or wait for the scheduler):
+
+```bash
+curl -X POST http://localhost:8083/api/v1/miot-calendar/slot-managers/{managerId}/run
+```
+
+Regenerate a specific past window (one-shot, cleared after success):
+
+```bash
+curl -X PUT http://localhost:8083/api/v1/miot-calendar/slot-managers/{managerId} \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reprocessFrom": "2025-01-01",
+    "reprocessTo": "2025-01-15"
   }'
 ```
 

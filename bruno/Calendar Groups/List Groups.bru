@@ -1,0 +1,15 @@
+meta {
+  name: List Groups
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/miot-calendar/groups
+  body: none
+  auth: none
+}
+
+params:query {
+  ~active: true
+}

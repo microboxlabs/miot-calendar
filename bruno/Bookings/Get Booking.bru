@@ -1,0 +1,11 @@
+meta {
+  name: Get Booking
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/miot-calendar/bookings/{{bookingId}}
+  body: none
+  auth: none
+}

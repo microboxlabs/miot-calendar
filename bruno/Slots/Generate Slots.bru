@@ -1,0 +1,23 @@
+meta {
+  name: Generate Slots
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/miot-calendar/slots/generate
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "calendarId": "{{calendarId}}",
+    "startDate": "2025-01-01",
+    "endDate": "2025-01-31"
+  }
+}

@@ -1,0 +1,16 @@
+meta {
+  name: List Calendars
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/miot-calendar/calendars
+  body: none
+  auth: none
+}
+
+params:query {
+  ~active: true
+  ~groupCode: warehouse-south
+}

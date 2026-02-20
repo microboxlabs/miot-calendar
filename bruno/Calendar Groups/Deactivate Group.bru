@@ -1,0 +1,11 @@
+meta {
+  name: Deactivate Group
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/miot-calendar/groups/{{calendarGroupId}}
+  body: none
+  auth: none
+}

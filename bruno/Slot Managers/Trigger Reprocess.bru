@@ -1,0 +1,27 @@
+meta {
+  name: Trigger Reprocess
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/v1/miot-calendar/slot-managers/{{slotManagerId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reprocessFrom": "2025-01-01",
+    "reprocessTo": "2025-01-31"
+  }
+}
+
+docs {
+  Schedule a one-shot slot regeneration for a date range.
+  The reprocessFrom/reprocessTo window is automatically cleared after a successful run.
+}
