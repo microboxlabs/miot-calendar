@@ -25,8 +25,12 @@ public class CalendarService {
     @Inject
     CalendarGroupService calendarGroupService;
 
+    private final SlotManagerService slotManagerService;
+
     @Inject
-    SlotManagerService slotManagerService;
+    public CalendarService(SlotManagerService slotManagerService) {
+        this.slotManagerService = slotManagerService;
+    }
 
     /**
      * Get all calendars
