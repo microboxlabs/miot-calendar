@@ -4,6 +4,7 @@ import com.microboxlabs.miot.calendar.entity.Calendar;
 import com.microboxlabs.miot.calendar.entity.TimeWindow;
 import com.microboxlabs.miot.calendar.model.*;
 import com.microboxlabs.miot.calendar.service.CalendarService;
+import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -14,6 +15,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
+import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
@@ -27,6 +29,8 @@ import java.util.UUID;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(name = "Calendars", description = "Calendar and time window management operations")
+@Authenticated
+@SecurityRequirement(name = "BearerAuth")
 public class CalendarResource {
 
     private static final Logger LOG = Logger.getLogger(CalendarResource.class);
