@@ -155,6 +155,51 @@ class CalendarResourceTest {
     }
 
     @Test
+    @Order(8)
+    void testHardDeleteCalendar() {
+        // Create a separate calendar for hard-delete testing
+        String purgeCalendarId = given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "code": "purge-test-calendar",
+                    "name": "Purge Test Calendar",
+                    "timezone": "America/Santiago"
+                }
+                """)
+            .when()
+            .post("/api/v1/miot-calendar/calendars")
+            .then()
+            .statusCode(201)
+            .extract()
+            .path("id");
+
+        // Purge the calendar
+        given()
+            .when()
+            .delete("/api/v1/miot-calendar/calendars/" + purgeCalendarId + "/purge")
+            .then()
+            .statusCode(204);
+
+        // Verify the calendar is gone
+        given()
+            .when()
+            .get("/api/v1/miot-calendar/calendars/" + purgeCalendarId)
+            .then()
+            .statusCode(404);
+    }
+
+    @Test
+    @Order(9)
+    void testHardDeleteNonExistentCalendar() {
+        given()
+            .when()
+            .delete("/api/v1/miot-calendar/calendars/00000000-0000-0000-0000-000000000000/purge")
+            .then()
+            .statusCode(404);
+    }
+
+    @Test
     void testCreateCalendarWithoutAutoSlotManager() {
         given()
             .contentType(ContentType.JSON)

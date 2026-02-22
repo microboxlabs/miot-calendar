@@ -104,6 +104,13 @@ public class Slot extends PanacheEntityBase {
     }
 
     /**
+     * Delete all slots belonging to a calendar
+     */
+    public static long deleteByCalendarId(UUID calendarId) {
+        return delete("calendar.id", calendarId);
+    }
+
+    /**
      * Check if slot has availability
      */
     public boolean hasAvailability() {

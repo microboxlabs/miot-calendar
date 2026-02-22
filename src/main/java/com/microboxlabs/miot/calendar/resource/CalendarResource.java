@@ -148,6 +148,29 @@ public class CalendarResource {
         }
     }
 
+    @DELETE
+    @Path("/{id}/purge")
+    @Operation(
+        operationId = "hardDeleteCalendar",
+        summary = "Permanently delete calendar",
+        description = "Irreversibly deletes the calendar and all its associated data (slots, bookings, time windows, slot manager)."
+    )
+    @APIResponse(responseCode = "204", description = "Calendar permanently deleted")
+    @APIResponse(responseCode = "404", description = "Calendar not found",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public Response hardDeleteCalendar(
+            @Parameter(description = "Unique identifier of the calendar to permanently delete", required = true)
+            @PathParam("id") UUID id) {
+        try {
+            calendarService.hardDeleteCalendar(id);
+            return Response.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.NOT_FOUND)
+                .entity(ErrorResponse.notFound(e.getMessage()))
+                .build();
+        }
+    }
+
     private boolean hasSlotManager(UUID calendarId) {
         return SlotManager.findByCalendarId(calendarId) != null;
     }
