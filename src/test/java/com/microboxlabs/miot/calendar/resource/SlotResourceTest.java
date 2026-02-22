@@ -1,5 +1,6 @@
 package com.microboxlabs.miot.calendar.resource;
 
+import io.quarkus.test.common.http.TestHTTPEndpoint;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
@@ -25,6 +26,14 @@ class SlotResourceTest {
 
     @TestHTTPResource
     URL url;
+
+    @TestHTTPEndpoint(SlotResource.class)
+    @TestHTTPResource
+    URL slotsUrl;
+
+    @TestHTTPEndpoint(SlotResource.class)
+    @TestHTTPResource("generate")
+    URL slotsGenerateUrl;
 
     private String calendarId;
     private String slotId;
@@ -67,7 +76,7 @@ class SlotResourceTest {
                     "endHour": 17,
                     "slotDurationMinutes": 30,
                     "capacityPerSlot": 3,
-                    "daysOfWeek": "MON,TUE,WED,THU,FRI,SAT,SUN",
+                    "daysOfWeek": "1,2,3,4,5,6,7",
                     "validFrom": "%s"
                 }
                 """, LocalDate.now().toString()))
@@ -93,7 +102,7 @@ class SlotResourceTest {
                 }
                 """, calendarId, today, nextWeek))
             .when()
-            .post("/api/v1/miot-calendar/slots/generate")
+            .post(slotsGenerateUrl.toString())
             .then()
             .statusCode(200)
             .body("slotsCreated", greaterThan(0))
@@ -111,7 +120,7 @@ class SlotResourceTest {
             .queryParam("startDate", today.toString())
             .queryParam("endDate", nextWeek.toString())
             .when()
-            .get("/api/v1/miot-calendar/slots")
+            .get(slotsUrl.toString())
             .then()
             .statusCode(200)
             .body("data.size()", greaterThan(0))
@@ -125,7 +134,7 @@ class SlotResourceTest {
     void testGetSlot() {
         given()
             .when()
-            .get("/api/v1/miot-calendar/slots/" + slotId)
+            .get(slotsUrl + "/" + slotId)
             .then()
             .statusCode(200)
             .body("id", equalTo(slotId));
@@ -142,7 +151,7 @@ class SlotResourceTest {
             .queryParam("endDate", today.plusDays(7).toString())
             .queryParam("available", true)
             .when()
-            .get("/api/v1/miot-calendar/slots")
+            .get(slotsUrl.toString())
             .then()
             .statusCode(200)
             .body("data.size()", greaterThan(0));
@@ -159,7 +168,7 @@ class SlotResourceTest {
                 }
                 """)
             .when()
-            .patch("/api/v1/miot-calendar/slots/" + slotId + "/status")
+            .patch(slotsUrl + "/" + slotId + "/status")
             .then()
             .statusCode(200)
             .body("status", equalTo("CLOSED"));
@@ -173,7 +182,7 @@ class SlotResourceTest {
                 }
                 """)
             .when()
-            .patch("/api/v1/miot-calendar/slots/" + slotId + "/status")
+            .patch(slotsUrl + "/" + slotId + "/status")
             .then()
             .statusCode(200)
             .body("status", equalTo("OPEN"));
@@ -183,7 +192,7 @@ class SlotResourceTest {
     void testListSlotsRequiresCalendarId() {
         given()
             .when()
-            .get("/api/v1/miot-calendar/slots")
+            .get(slotsUrl.toString())
             .then()
             .statusCode(400);
     }
@@ -198,7 +207,7 @@ class SlotResourceTest {
                 }
                 """)
             .when()
-            .post("/api/v1/miot-calendar/slots/generate")
+            .post(slotsGenerateUrl.toString())
             .then()
             .statusCode(400);
     }

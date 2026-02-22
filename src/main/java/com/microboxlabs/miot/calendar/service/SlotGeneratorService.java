@@ -59,7 +59,7 @@ public class SlotGeneratorService {
                 int hour = timeWindow.startHour;
                 int minutes = 0;
 
-                while (hour < timeWindow.endHour || (hour == timeWindow.endHour && minutes == 0)) {
+                while (hour < timeWindow.endHour) {
                     // Check if slot already exists
                     Slot existing = Slot.findByCalendarAndDateTime(calendarId, date, hour, minutes);
                     
@@ -97,17 +97,10 @@ public class SlotGeneratorService {
     }
 
     /**
-     * Convert DayOfWeek to string code
+     * Convert DayOfWeek to its ISO numeric string (1=Monday … 7=Sunday),
+     * matching the format stored by the API ("daysOfWeek": "1,2,3,4,5").
      */
     private String getDayOfWeekCode(DayOfWeek dayOfWeek) {
-        return switch (dayOfWeek) {
-            case MONDAY -> "MON";
-            case TUESDAY -> "TUE";
-            case WEDNESDAY -> "WED";
-            case THURSDAY -> "THU";
-            case FRIDAY -> "FRI";
-            case SATURDAY -> "SAT";
-            case SUNDAY -> "SUN";
-        };
+        return String.valueOf(dayOfWeek.getValue());
     }
 }
