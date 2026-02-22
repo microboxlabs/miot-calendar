@@ -2,6 +2,7 @@ package com.microboxlabs.miot.calendar.service;
 
 import com.microboxlabs.miot.calendar.entity.Calendar;
 import com.microboxlabs.miot.calendar.entity.CalendarGroup;
+import com.microboxlabs.miot.calendar.entity.Slot;
 import com.microboxlabs.miot.calendar.entity.TimeWindow;
 import com.microboxlabs.miot.calendar.model.CalendarRequest;
 import com.microboxlabs.miot.calendar.model.TimeWindowRequest;
@@ -162,6 +163,22 @@ public class CalendarService {
         calendar.active = false;
         slotManagerService.deactivateManagerByCalendarId(id);
         LOG.infof("Deactivated calendar: %s (%s)", calendar.name, calendar.code);
+    }
+
+    /**
+     * Hard delete a calendar and all its associated data
+     */
+    @Transactional
+    public void hardDeleteCalendar(UUID id) {
+        Calendar calendar = Calendar.findById(id);
+        if (calendar == null) {
+            throw new IllegalArgumentException("Calendar not found: " + id);
+        }
+        // Step 1: Delete all slots (DB cascade deletes related bookings via slot_id FK)
+        Slot.delete("calendar.id", id);
+        // Step 2: Delete the calendar (JPA cascade deletes TimeWindows; DB cascade deletes SlotManager+Runs+GroupMembers)
+        calendar.delete();
+        LOG.infof("Hard deleted calendar: %s (%s)", calendar.name, calendar.code);
     }
 
     /**
