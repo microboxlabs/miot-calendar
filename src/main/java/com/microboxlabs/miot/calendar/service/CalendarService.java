@@ -175,7 +175,7 @@ public class CalendarService {
             throw new IllegalArgumentException("Calendar not found: " + id);
         }
         // Step 1: Delete all slots (DB cascade deletes related bookings via slot_id FK)
-        Slot.delete("calendar.id", id);
+        Slot.deleteByCalendarId(id);
         // Step 2: Delete the calendar (JPA cascade deletes TimeWindows; DB cascade deletes SlotManager+Runs+GroupMembers)
         calendar.delete();
         LOG.infof("Hard deleted calendar: %s (%s)", calendar.name, calendar.code);
