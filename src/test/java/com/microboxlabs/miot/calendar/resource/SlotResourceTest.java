@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -92,6 +93,9 @@ class SlotResourceTest {
         LocalDate today = LocalDate.now();
         LocalDate nextWeek = today.plusDays(7);
 
+        // With auto-generation now active, slots are created immediately when the
+        // time window is persisted. A subsequent explicit generate call for the same
+        // range must report the existing slots as skipped rather than re-creating them.
         given()
             .contentType(ContentType.JSON)
             .body(String.format("""
@@ -105,7 +109,8 @@ class SlotResourceTest {
             .post(slotsGenerateUrl.toString())
             .then()
             .statusCode(200)
-            .body("slotsCreated", greaterThan(0))
+            .body("slotsCreated", greaterThanOrEqualTo(0))
+            .body("slotsSkipped", greaterThan(0))
             .body("message", containsString("Generated"));
     }
 

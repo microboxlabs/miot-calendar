@@ -11,6 +11,7 @@ import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.event.TransactionPhase;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import jakarta.transaction.Transactional.TxType;
 import org.jboss.logging.Logger;
 
 import java.time.LocalDate;
@@ -150,7 +151,13 @@ public class SlotManagerExecutor {
      * creation, or when a time window is created/updated.  Using AFTER_SUCCESS
      * ensures the manager and time-window rows are visible to the generator's
      * queries before we start generating slots.
+     *
+     * REQUIRES_NEW is necessary because Narayana keeps the committed transaction
+     * context associated with the thread during AFTER_SUCCESS notification.
+     * Without it, the REQUIRED methods inside runManager() attempt to join the
+     * already-inactive transaction and throw InactiveTransactionException.
      */
+    @Transactional(TxType.REQUIRES_NEW)
     void onSlotManagerTrigger(
             @Observes(during = TransactionPhase.AFTER_SUCCESS) SlotManagerTriggerEvent event) {
         LOG.infof("Slot manager trigger received for manager %s (triggered by: %s)",
