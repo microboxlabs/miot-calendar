@@ -3,14 +3,18 @@ package com.microboxlabs.miot.calendar.service;
 import com.microboxlabs.miot.calendar.entity.Calendar;
 import com.microboxlabs.miot.calendar.entity.CalendarGroup;
 import com.microboxlabs.miot.calendar.entity.Slot;
+import com.microboxlabs.miot.calendar.entity.SlotManager;
 import com.microboxlabs.miot.calendar.entity.TimeWindow;
 import com.microboxlabs.miot.calendar.model.CalendarRequest;
+import com.microboxlabs.miot.calendar.model.SlotManagerTriggerEvent;
 import com.microboxlabs.miot.calendar.model.TimeWindowRequest;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,11 +30,14 @@ public class CalendarService {
     @Inject
     CalendarGroupService calendarGroupService;
 
+    private final Event<SlotManagerTriggerEvent> slotManagerTrigger;
     private final SlotManagerService slotManagerService;
 
     @Inject
-    public CalendarService(SlotManagerService slotManagerService) {
+    public CalendarService(SlotManagerService slotManagerService,
+                           Event<SlotManagerTriggerEvent> slotManagerTrigger) {
         this.slotManagerService = slotManagerService;
+        this.slotManagerTrigger = slotManagerTrigger;
     }
 
     /**
@@ -100,7 +107,8 @@ public class CalendarService {
         // Auto-provision SlotManager (defaults to true when null)
         boolean autoSlotManager = request.autoSlotManager() == null || request.autoSlotManager();
         if (autoSlotManager) {
-            slotManagerService.createDefaultManager(calendar);
+            SlotManager manager = slotManagerService.createDefaultManager(calendar);
+            slotManagerTrigger.fire(new SlotManagerTriggerEvent(manager.id, "API"));
         }
 
         LOG.infof("Created calendar: %s (%s)", calendar.name, calendar.code);
@@ -222,14 +230,25 @@ public class CalendarService {
         timeWindow.endHour = request.endHour();
         timeWindow.slotDurationMinutes = request.slotDurationMinutes() != null ? request.slotDurationMinutes() : 30;
         timeWindow.capacityPerSlot = request.capacityPerSlot() != null ? request.capacityPerSlot() : 1;
-        timeWindow.daysOfWeek = request.daysOfWeek() != null ? request.daysOfWeek() : "MON,TUE,WED,THU,FRI";
+        timeWindow.daysOfWeek = request.daysOfWeek() != null ? request.daysOfWeek() : "1,2,3,4,5";
         timeWindow.validFrom = request.validFrom();
         timeWindow.validTo = request.validTo();
         timeWindow.active = request.active() != null ? request.active() : true;
 
         timeWindow.persist();
         LOG.infof("Created time window: %s for calendar %s", timeWindow.name, calendar.code);
-        
+
+        SlotManager manager = SlotManager.findByCalendarId(calendarId);
+        if (manager != null && Boolean.TRUE.equals(manager.active)) {
+            // If the manager already generated slots through a future date, force a
+            // reprocess so this new time window's slots are created for the full range.
+            if (manager.generatedThrough != null) {
+                manager.reprocessFrom = LocalDate.now();
+                manager.reprocessTo   = manager.generatedThrough;
+            }
+            slotManagerTrigger.fire(new SlotManagerTriggerEvent(manager.id, "API"));
+        }
+
         return timeWindow;
     }
 
@@ -272,6 +291,17 @@ public class CalendarService {
         }
 
         LOG.infof("Updated time window: %s", timeWindow.name);
+
+        SlotManager manager = SlotManager.findByCalendarId(timeWindow.calendar.id);
+        if (manager != null && Boolean.TRUE.equals(manager.active)) {
+            // Force a reprocess so updated schedule rules apply to already-generated dates.
+            if (manager.generatedThrough != null) {
+                manager.reprocessFrom = LocalDate.now();
+                manager.reprocessTo   = manager.generatedThrough;
+            }
+            slotManagerTrigger.fire(new SlotManagerTriggerEvent(manager.id, "API"));
+        }
+
         return timeWindow;
     }
 }

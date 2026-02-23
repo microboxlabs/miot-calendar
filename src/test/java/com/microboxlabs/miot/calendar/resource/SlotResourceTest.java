@@ -92,6 +92,9 @@ class SlotResourceTest {
         LocalDate today = LocalDate.now();
         LocalDate nextWeek = today.plusDays(7);
 
+        // With auto-generation now active, slots are created immediately when the
+        // time window is persisted. A subsequent explicit generate call for the same
+        // range must report the existing slots as skipped rather than re-creating them.
         given()
             .contentType(ContentType.JSON)
             .body(String.format("""
@@ -105,7 +108,8 @@ class SlotResourceTest {
             .post(slotsGenerateUrl.toString())
             .then()
             .statusCode(200)
-            .body("slotsCreated", greaterThan(0))
+            .body("slotsCreated", equalTo(0))
+            .body("slotsSkipped", greaterThan(0))
             .body("message", containsString("Generated"));
     }
 
