@@ -18,7 +18,6 @@ import java.time.LocalDate;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -109,7 +108,7 @@ class SlotResourceTest {
             .post(slotsGenerateUrl.toString())
             .then()
             .statusCode(200)
-            .body("slotsCreated", greaterThanOrEqualTo(0))
+            .body("slotsCreated", equalTo(0))
             .body("slotsSkipped", greaterThan(0))
             .body("message", containsString("Generated"));
     }
