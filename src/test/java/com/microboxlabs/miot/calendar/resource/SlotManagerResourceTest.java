@@ -1,5 +1,6 @@
 package com.microboxlabs.miot.calendar.resource;
 
+import io.quarkus.test.common.http.TestHTTPEndpoint;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
@@ -21,6 +22,15 @@ class SlotManagerResourceTest {
 
     @TestHTTPResource
     URL url;
+
+    @TestHTTPEndpoint(SlotManagerResource.class)
+    @TestHTTPResource
+    URL slotManagersUrl;
+
+    private static final String DAYS_IN_ADVANCE = "daysInAdvance";
+    private static final String STATUS_SUCCESS   = "SUCCESS";
+    private static final String STATUS           = "status";
+    private static final String SIZE             = "size()";
 
     private String calendarId;
     private String managerId;
@@ -62,7 +72,7 @@ class SlotManagerResourceTest {
                     "endHour": 12,
                     "slotDurationMinutes": 60,
                     "capacityPerSlot": 2,
-                    "daysOfWeek": "MON,TUE,WED,THU,FRI,SAT,SUN",
+                    "daysOfWeek": "1,2,3,4,5,6,7",
                     "validFrom": "%s"
                 }
                 """, LocalDate.now().toString()))
@@ -88,12 +98,12 @@ class SlotManagerResourceTest {
                 }
                 """, calendarId))
             .when()
-            .post("/api/v1/miot-calendar/slot-managers")
+            .post(slotManagersUrl.toString())
             .then()
             .statusCode(201)
             .body("calendarId", equalTo(calendarId))
             .body("active", equalTo(true))
-            .body("daysInAdvance", equalTo(14))
+            .body(DAYS_IN_ADVANCE, equalTo(14))
             .body("batchDays", equalTo(7))
             .body("lastRunStatus", nullValue())
             .extract()
@@ -105,10 +115,10 @@ class SlotManagerResourceTest {
     void testListManagers() {
         given()
             .when()
-            .get("/api/v1/miot-calendar/slot-managers")
+            .get(slotManagersUrl.toString())
             .then()
             .statusCode(200)
-            .body("size()", greaterThanOrEqualTo(1));
+            .body(SIZE, greaterThanOrEqualTo(1));
     }
 
     @Test
@@ -116,11 +126,11 @@ class SlotManagerResourceTest {
     void testGetManager() {
         given()
             .when()
-            .get("/api/v1/miot-calendar/slot-managers/" + managerId)
+            .get(slotManagersUrl + "/" + managerId)
             .then()
             .statusCode(200)
             .body("id", equalTo(managerId))
-            .body("daysInAdvance", equalTo(14));
+            .body(DAYS_IN_ADVANCE, equalTo(14));
     }
 
     @Test
@@ -135,10 +145,10 @@ class SlotManagerResourceTest {
                 }
                 """)
             .when()
-            .put("/api/v1/miot-calendar/slot-managers/" + managerId)
+            .put(slotManagersUrl + "/" + managerId)
             .then()
             .statusCode(200)
-            .body("daysInAdvance", equalTo(21))
+            .body(DAYS_IN_ADVANCE, equalTo(21))
             .body("batchDays", equalTo(3));
     }
 
@@ -149,12 +159,12 @@ class SlotManagerResourceTest {
     void testRunOneManager() {
         given()
             .when()
-            .post("/api/v1/miot-calendar/slot-managers/" + managerId + "/run")
+            .post(slotManagersUrl + "/" + managerId + "/run")
             .then()
             .statusCode(200)
             .body("managerId", equalTo(managerId))
             .body("triggeredBy", equalTo("API"))
-            .body("status", equalTo("SUCCESS"))
+            .body(STATUS, equalTo(STATUS_SUCCESS))
             .body("slotsCreated", greaterThan(0))
             .body("generatedFrom", notNullValue())
             .body("generatedThrough", notNullValue());
@@ -166,10 +176,10 @@ class SlotManagerResourceTest {
         // Running again immediately: already generated through the horizon
         given()
             .when()
-            .post("/api/v1/miot-calendar/slot-managers/" + managerId + "/run")
+            .post(slotManagersUrl + "/" + managerId + "/run")
             .then()
             .statusCode(200)
-            .body("status", equalTo("SKIPPED"));
+            .body(STATUS, equalTo("SKIPPED"));
     }
 
     @Test
@@ -177,10 +187,10 @@ class SlotManagerResourceTest {
     void testRunAll() {
         given()
             .when()
-            .post("/api/v1/miot-calendar/slot-managers/run")
+            .post(slotManagersUrl + "/run")
             .then()
             .statusCode(200)
-            .body("size()", greaterThanOrEqualTo(0)); // may be empty if soft-lock triggers
+            .body(SIZE, greaterThanOrEqualTo(0)); // may be empty if soft-lock triggers
     }
 
     // ── Reprocess ─────────────────────────────────────────────────────────
@@ -201,7 +211,7 @@ class SlotManagerResourceTest {
                 }
                 """, from, to))
             .when()
-            .put("/api/v1/miot-calendar/slot-managers/" + managerId)
+            .put(slotManagersUrl + "/" + managerId)
             .then()
             .statusCode(200)
             .body("reprocessFrom", equalTo(from.toString()))
@@ -210,22 +220,22 @@ class SlotManagerResourceTest {
         // Trigger run — should use reprocess window and clear it on success
         given()
             .when()
-            .post("/api/v1/miot-calendar/slot-managers/" + managerId + "/run")
+            .post(slotManagersUrl + "/" + managerId + "/run")
             .then()
             .statusCode(200)
-            .body("status", equalTo("SUCCESS"))
+            .body(STATUS, equalTo(STATUS_SUCCESS))
             .body("generatedFrom",    equalTo(from.toString()))
             .body("generatedThrough", equalTo(to.toString()));
 
         // Reprocess fields should be cleared after successful run
         given()
             .when()
-            .get("/api/v1/miot-calendar/slot-managers/" + managerId)
+            .get(slotManagersUrl + "/" + managerId)
             .then()
             .statusCode(200)
             .body("reprocessFrom", nullValue())
             .body("reprocessTo",   nullValue())
-            .body("lastRunStatus", equalTo("SUCCESS"));
+            .body("lastRunStatus", equalTo(STATUS_SUCCESS));
     }
 
     // ── Run history ───────────────────────────────────────────────────────
@@ -236,10 +246,10 @@ class SlotManagerResourceTest {
         given()
             .queryParam("limit", 10)
             .when()
-            .get("/api/v1/miot-calendar/slot-managers/" + managerId + "/runs")
+            .get(slotManagersUrl + "/" + managerId + "/runs")
             .then()
             .statusCode(200)
-            .body("size()", greaterThanOrEqualTo(1))
+            .body(SIZE, greaterThanOrEqualTo(1))
             .body("[0].managerId", equalTo(managerId));
     }
 
@@ -249,10 +259,10 @@ class SlotManagerResourceTest {
         given()
             .queryParam("limit", 50)
             .when()
-            .get("/api/v1/miot-calendar/slot-managers/runs")
+            .get(slotManagersUrl + "/runs")
             .then()
             .statusCode(200)
-            .body("size()", greaterThanOrEqualTo(1));
+            .body(SIZE, greaterThanOrEqualTo(1));
     }
 
     // ── Deactivate ────────────────────────────────────────────────────────
@@ -262,13 +272,13 @@ class SlotManagerResourceTest {
     void testDeactivateManager() {
         given()
             .when()
-            .delete("/api/v1/miot-calendar/slot-managers/" + managerId)
+            .delete(slotManagersUrl + "/" + managerId)
             .then()
             .statusCode(204);
 
         given()
             .when()
-            .get("/api/v1/miot-calendar/slot-managers/" + managerId)
+            .get(slotManagersUrl + "/" + managerId)
             .then()
             .statusCode(200)
             .body("active", equalTo(false));
@@ -287,7 +297,7 @@ class SlotManagerResourceTest {
                 }
                 """)
             .when()
-            .post("/api/v1/miot-calendar/slot-managers")
+            .post(slotManagersUrl.toString())
             .then()
             .statusCode(400);
     }
@@ -303,7 +313,7 @@ class SlotManagerResourceTest {
                 }
                 """)
             .when()
-            .post("/api/v1/miot-calendar/slot-managers")
+            .post(slotManagersUrl.toString())
             .then()
             .statusCode(400);
     }
@@ -320,7 +330,7 @@ class SlotManagerResourceTest {
                 }
                 """, calendarId))
             .when()
-            .post("/api/v1/miot-calendar/slot-managers")
+            .post(slotManagersUrl.toString())
             .then()
             .statusCode(400);
     }
@@ -337,7 +347,7 @@ class SlotManagerResourceTest {
                 }
                 """, LocalDate.now()))
             .when()
-            .put("/api/v1/miot-calendar/slot-managers/" + managerId)
+            .put(slotManagersUrl + "/" + managerId)
             .then()
             .statusCode(400);
     }
@@ -347,7 +357,7 @@ class SlotManagerResourceTest {
     void testGetNonExistentManager() {
         given()
             .when()
-            .get("/api/v1/miot-calendar/slot-managers/00000000-0000-0000-0000-000000000000")
+            .get(slotManagersUrl + "/00000000-0000-0000-0000-000000000000")
             .then()
             .statusCode(404);
     }
@@ -357,7 +367,7 @@ class SlotManagerResourceTest {
     void testRunNonExistentManager() {
         given()
             .when()
-            .post("/api/v1/miot-calendar/slot-managers/00000000-0000-0000-0000-000000000000/run")
+            .post(slotManagersUrl + "/00000000-0000-0000-0000-000000000000/run")
             .then()
             .statusCode(404);
     }

@@ -28,6 +28,12 @@ class BookingResourceTest {
     @TestHTTPResource
     URL url;
 
+    @TestHTTPEndpoint(BookingResource.class)
+    @TestHTTPResource
+    URL bookingsUrl;
+
+    private static final String RESOURCE_ID = "%s";
+
     private String calendarId;
     private String bookingId;
     private LocalDate slotDate;
@@ -73,7 +79,7 @@ class BookingResourceTest {
                     "endHour": 17,
                     "slotDurationMinutes": 30,
                     "capacityPerSlot": 2,
-                    "daysOfWeek": "MON,TUE,WED,THU,FRI,SAT,SUN",
+                    "daysOfWeek": "1,2,3,4,5,6,7",
                     "validFrom": "%s"
                 }
                 """, LocalDate.now().toString()))
@@ -108,7 +114,7 @@ class BookingResourceTest {
                 {
                     "calendarId": "%s",
                     "resource": {
-                        "id": "SRV-001",
+                        "id": "%s",
                         "type": "SERVICE",
                         "label": "Acme Corp - Santiago to Valparaiso",
                         "data": {
@@ -124,12 +130,12 @@ class BookingResourceTest {
                         "minutes": %d
                     }
                 }
-                """, calendarId, slotDate, slotHour, slotMinutes))
+                """, calendarId, RESOURCE_ID, slotDate, slotHour, slotMinutes))
             .when()
-            .post("/api/v1/miot-calendar/bookings")
+            .post(bookingsUrl.toString())
             .then()
             .statusCode(201)
-            .body("resource.id", equalTo("SRV-001"))
+            .body("resource.id", equalTo(RESOURCE_ID))
             .body("resource.type", equalTo("SERVICE"))
             .body("createdBy", equalTo("test-user"))
             .extract()
@@ -144,11 +150,11 @@ class BookingResourceTest {
             .queryParam("startDate", slotDate.toString())
             .queryParam("endDate", slotDate.plusDays(7).toString())
             .when()
-            .get("/api/v1/miot-calendar/bookings")
+            .get(bookingsUrl.toString())
             .then()
             .statusCode(200)
             .body("data.size()", greaterThan(0))
-            .body("data[0].resource.id", equalTo("SRV-001"));
+            .body("data[0].resource.id", equalTo(RESOURCE_ID));
     }
 
     @Test
@@ -156,11 +162,11 @@ class BookingResourceTest {
     void testGetBooking() {
         given()
             .when()
-            .get("/api/v1/miot-calendar/bookings/" + bookingId)
+            .get(bookingsUrl + "/" + bookingId)
             .then()
             .statusCode(200)
             .body("id", equalTo(bookingId))
-            .body("resource.id", equalTo("SRV-001"));
+            .body("resource.id", equalTo(RESOURCE_ID));
     }
 
     @Test
@@ -168,7 +174,7 @@ class BookingResourceTest {
     void testGetBookingsByResource() {
         given()
             .when()
-            .get("/api/v1/miot-calendar/bookings/resource/SRV-001")
+            .get(bookingsUrl + "/resource/" + RESOURCE_ID)
             .then()
             .statusCode(200)
             .body("data.size()", greaterThan(0));
@@ -184,7 +190,7 @@ class BookingResourceTest {
                 {
                     "calendarId": "%s",
                     "resource": {
-                        "id": "SRV-001",
+                        "id": "%s",
                         "type": "SERVICE",
                         "label": "Duplicate booking"
                     },
@@ -194,9 +200,9 @@ class BookingResourceTest {
                         "minutes": %d
                     }
                 }
-                """, calendarId, slotDate, slotHour, slotMinutes))
+                """, calendarId, RESOURCE_ID, slotDate, slotHour, slotMinutes))
             .when()
-            .post("/api/v1/miot-calendar/bookings")
+            .post(bookingsUrl.toString())
             .then()
             .statusCode(409); // Conflict
     }
@@ -223,7 +229,7 @@ class BookingResourceTest {
                 }
                 """, calendarId, slotDate, slotHour, slotMinutes))
             .when()
-            .post("/api/v1/miot-calendar/bookings")
+            .post(bookingsUrl.toString())
             .then()
             .statusCode(201);
     }
@@ -250,7 +256,7 @@ class BookingResourceTest {
                 }
                 """, calendarId, slotDate, slotHour, slotMinutes))
             .when()
-            .post("/api/v1/miot-calendar/bookings")
+            .post(bookingsUrl.toString())
             .then()
             .statusCode(409); // Conflict - slot full
     }
@@ -260,14 +266,14 @@ class BookingResourceTest {
     void testCancelBooking() {
         given()
             .when()
-            .delete("/api/v1/miot-calendar/bookings/" + bookingId)
+            .delete(bookingsUrl + "/" + bookingId)
             .then()
             .statusCode(204);
 
         // Verify booking is gone
         given()
             .when()
-            .get("/api/v1/miot-calendar/bookings/" + bookingId)
+            .get(bookingsUrl + "/" + bookingId)
             .then()
             .statusCode(404);
     }
@@ -284,7 +290,7 @@ class BookingResourceTest {
                 }
                 """)
             .when()
-            .post("/api/v1/miot-calendar/bookings")
+            .post(bookingsUrl.toString())
             .then()
             .statusCode(400);
     }
@@ -293,7 +299,7 @@ class BookingResourceTest {
     void testBookingNotFound() {
         given()
             .when()
-            .get("/api/v1/miot-calendar/bookings/00000000-0000-0000-0000-000000000000")
+            .get(bookingsUrl + "/00000000-0000-0000-0000-000000000000")
             .then()
             .statusCode(404);
     }

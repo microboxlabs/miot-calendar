@@ -43,7 +43,7 @@ public class TimeWindow extends PanacheEntityBase {
     public Integer capacityPerSlot = 1;
 
     @Column(name = "days_of_week", length = 50)
-    public String daysOfWeek = "MON,TUE,WED,THU,FRI";
+    public String daysOfWeek = "1,2,3,4,5";
 
     @Column(name = "valid_from", nullable = false)
     public LocalDate validFrom;
@@ -97,6 +97,11 @@ public class TimeWindow extends PanacheEntityBase {
         if (daysOfWeek == null || daysOfWeek.isEmpty()) {
             return false;
         }
-        return daysOfWeek.contains(dayOfWeek);
+        for (String token : daysOfWeek.split(",")) {
+            if (token.trim().equals(dayOfWeek)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
