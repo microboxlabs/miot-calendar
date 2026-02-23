@@ -32,7 +32,7 @@ class BookingResourceTest {
     @TestHTTPResource
     URL bookingsUrl;
 
-    private static final String RESOURCE_ID = "%s";
+    private static final String RESOURCE_ID = "SRV-001";
 
     private String calendarId;
     private String bookingId;
