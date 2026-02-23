@@ -5,7 +5,10 @@ import com.microboxlabs.miot.calendar.entity.SlotManagerRun;
 import com.microboxlabs.miot.calendar.model.GenerateSlotsResponse;
 import com.microboxlabs.miot.calendar.model.RunStatus;
 import com.microboxlabs.miot.calendar.model.SlotManagerRunResponse;
+import com.microboxlabs.miot.calendar.model.SlotManagerTriggerEvent;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.event.TransactionPhase;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
@@ -138,6 +141,21 @@ public class SlotManagerExecutor {
         }
 
         return loadRunResponse(runId);
+    }
+
+    /**
+     * Runs a single slot manager after the originating write transaction commits.
+     *
+     * Fired by CalendarService when a SlotManager is auto-provisioned on calendar
+     * creation, or when a time window is created/updated.  Using AFTER_SUCCESS
+     * ensures the manager and time-window rows are visible to the generator's
+     * queries before we start generating slots.
+     */
+    void onSlotManagerTrigger(
+            @Observes(during = TransactionPhase.AFTER_SUCCESS) SlotManagerTriggerEvent event) {
+        LOG.infof("Slot manager trigger received for manager %s (triggered by: %s)",
+            event.managerId(), event.triggeredBy());
+        runManager(event.managerId(), event.triggeredBy());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
