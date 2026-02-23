@@ -164,8 +164,8 @@ public class SlotManagerExecutor {
             event.managerId(), event.triggeredBy());
         try {
             runManager(event.managerId(), event.triggeredBy());
-        } catch (Throwable t) {
-            LOG.errorf(t, "Slot manager trigger failed for manager %s (triggered by: %s)",
+        } catch (Exception e) {
+            LOG.errorf(e, "Slot manager trigger failed for manager %s (triggered by: %s)",
                 event.managerId(), event.triggeredBy());
         }
     }

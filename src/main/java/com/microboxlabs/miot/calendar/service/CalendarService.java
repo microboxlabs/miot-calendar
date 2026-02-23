@@ -30,14 +30,14 @@ public class CalendarService {
     @Inject
     CalendarGroupService calendarGroupService;
 
-    @Inject
-    Event<SlotManagerTriggerEvent> slotManagerTrigger;
-
+    private final Event<SlotManagerTriggerEvent> slotManagerTrigger;
     private final SlotManagerService slotManagerService;
 
     @Inject
-    public CalendarService(SlotManagerService slotManagerService) {
+    public CalendarService(SlotManagerService slotManagerService,
+                           Event<SlotManagerTriggerEvent> slotManagerTrigger) {
         this.slotManagerService = slotManagerService;
+        this.slotManagerTrigger = slotManagerTrigger;
     }
 
     /**
