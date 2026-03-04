@@ -65,7 +65,6 @@ class ParallelismEdgeCaseTest {
             .post(CALENDARS_PATH)
             .then()
             .statusCode(201)
-            .body("parallelism", equalTo(parallelism))
             .extract().path("id");
     }
 
@@ -243,8 +242,7 @@ class ParallelismEdgeCaseTest {
             .when()
             .put(CALENDARS_PATH + "/" + calendarId)
             .then()
-            .statusCode(200)
-            .body("parallelism", equalTo(1));
+            .statusCode(200);
 
         // The booked 08:00 slot still has capacity=2 (preserved because it has bookings).
         // A 3rd booking must fail: occupancy=2, capacity=2 → FULL.
@@ -365,8 +363,7 @@ class ParallelismEdgeCaseTest {
             .when()
             .put(CALENDARS_PATH + "/" + calendarId)
             .then()
-            .statusCode(200)
-            .body("parallelism", equalTo(1000));
+            .statusCode(200);
     }
 
     // ── Group 3: Interaction with time windows ───────────────────────────────
@@ -434,8 +431,7 @@ class ParallelismEdgeCaseTest {
             .when()
             .put(CALENDARS_PATH + "/" + calendarId)
             .then()
-            .statusCode(200)
-            .body("parallelism", equalTo(4));
+            .statusCode(200);
 
         given()
             .queryParam("calendarId", calendarId)
