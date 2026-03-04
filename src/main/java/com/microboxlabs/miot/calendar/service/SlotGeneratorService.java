@@ -9,7 +9,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -54,69 +53,66 @@ public class SlotGeneratorService {
                 deleted, calendarId, startDate, endDate);
         }
 
-        int created = 0;
-        int skipped = 0;
+        int[] counts = {0, 0}; // [created, skipped]
 
-        // Iterate through each date in the range
         LocalDate currentDate = startDate;
         while (!currentDate.isAfter(endDate)) {
-            final LocalDate date = currentDate;
-            String dayOfWeek = getDayOfWeekCode(date.getDayOfWeek());
-
-            // Find applicable time windows for this date
-            List<TimeWindow> validWindows = timeWindows.stream()
-                .filter(tw -> tw.validFrom.compareTo(date) <= 0)
-                .filter(tw -> tw.validTo == null || tw.validTo.compareTo(date) >= 0)
-                .filter(tw -> tw.includesDay(dayOfWeek))
-                .toList();
-
-            for (TimeWindow timeWindow : validWindows) {
-                // Generate slots for this time window
-                int hour = timeWindow.startHour;
-                int minutes = 0;
-
-                while (hour < timeWindow.endHour) {
-                    // Check if slot already exists
-                    Slot existing = Slot.findByCalendarAndDateTime(calendarId, date, hour, minutes);
-                    
-                    if (existing == null) {
-                        // Create new slot
-                        Slot slot = new Slot();
-                        slot.calendar = calendar;
-                        slot.timeWindow = timeWindow;
-                        slot.slotDate = date;
-                        slot.slotHour = hour;
-                        slot.slotMinutes = minutes;
-                        slot.capacity = calendar.parallelism;
-                        slot.currentOccupancy = 0;
-                        slot.status = SlotStatus.OPEN;
-                        slot.persist();
-                        created++;
-                    } else {
-                        skipped++;
-                    }
-
-                    // Move to next slot
-                    minutes += timeWindow.slotDurationMinutes;
-                    if (minutes >= 60) {
-                        hour += minutes / 60;
-                        minutes = minutes % 60;
-                    }
-                }
-            }
-
+            generateSlotsForDate(calendar, timeWindows, currentDate, counts);
             currentDate = currentDate.plusDays(1);
         }
 
-        LOG.infof("Generated %d slots for calendar %s (%d skipped)", created, calendarId, skipped);
-        return GenerateSlotsResponse.of(created, skipped);
+        LOG.infof("Generated %d slots for calendar %s (%d skipped)", counts[0], calendarId, counts[1]);
+        return GenerateSlotsResponse.of(counts[0], counts[1]);
     }
 
-    /**
-     * Convert DayOfWeek to its ISO numeric string (1=Monday … 7=Sunday),
-     * matching the format stored by the API ("daysOfWeek": "1,2,3,4,5").
-     */
-    private String getDayOfWeekCode(DayOfWeek dayOfWeek) {
-        return String.valueOf(dayOfWeek.getValue());
+    private void generateSlotsForDate(Calendar calendar, List<TimeWindow> timeWindows,
+                                      LocalDate date, int[] counts) {
+        String dayOfWeek = String.valueOf(date.getDayOfWeek().getValue());
+
+        List<TimeWindow> validWindows = timeWindows.stream()
+            .filter(tw -> tw.validFrom.compareTo(date) <= 0)
+            .filter(tw -> tw.validTo == null || tw.validTo.compareTo(date) >= 0)
+            .filter(tw -> tw.includesDay(dayOfWeek))
+            .toList();
+
+        for (TimeWindow timeWindow : validWindows) {
+            generateSlotsForWindow(calendar, timeWindow, date, counts);
+        }
+    }
+
+    private void generateSlotsForWindow(Calendar calendar, TimeWindow timeWindow,
+                                        LocalDate date, int[] counts) {
+        int hour = timeWindow.startHour;
+        int minutes = 0;
+
+        while (hour < timeWindow.endHour) {
+            Slot existing = Slot.findByCalendarAndDateTime(calendar.id, date, hour, minutes);
+            if (existing == null) {
+                createSlot(calendar, timeWindow, date, hour, minutes);
+                counts[0]++;
+            } else {
+                counts[1]++;
+            }
+
+            minutes += timeWindow.slotDurationMinutes;
+            if (minutes >= 60) {
+                hour += minutes / 60;
+                minutes = minutes % 60;
+            }
+        }
+    }
+
+    private void createSlot(Calendar calendar, TimeWindow timeWindow,
+                            LocalDate date, int hour, int minutes) {
+        Slot slot = new Slot();
+        slot.calendar = calendar;
+        slot.timeWindow = timeWindow;
+        slot.slotDate = date;
+        slot.slotHour = hour;
+        slot.slotMinutes = minutes;
+        slot.capacity = calendar.parallelism;
+        slot.currentOccupancy = 0;
+        slot.status = SlotStatus.OPEN;
+        slot.persist();
     }
 }
