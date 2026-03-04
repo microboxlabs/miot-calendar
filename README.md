@@ -8,6 +8,8 @@ MIOT Calendar provides a generic, database-first calendar solution for booking r
 
 - **Calendar Groups** for organizing calendars into flat, reusable labels (many-to-many)
 - **Multiple calendars** with independent configurations
+- **Parallelism** — configurable number of parallel resources per calendar (e.g., loading docks)
+- **Capacity model** — slot duration and count derived from time window capacity and calendar parallelism
 - **Time windows** defining when slots are available
 - **Materialized slots** for fast queries and availability checks
 - **Generic resource booking** with JSONB for flexible data storage
@@ -200,9 +202,12 @@ curl -X POST http://localhost:8083/api/v1/miot-calendar/calendars \
     "code": "despacho-santiago",
     "name": "Despacho Santiago",
     "timezone": "America/Santiago",
+    "parallelism": 5,
     "groups": ["warehouse-south"]
   }'
 ```
+
+The `parallelism` field defines how many resources can be served in parallel per slot (e.g., 5 loading docks). Defaults to 1.
 
 ### 2. Create a Time Window
 
@@ -213,12 +218,20 @@ curl -X POST http://localhost:8083/api/v1/miot-calendar/calendars/{calendarId}/t
     "name": "Turno Mañana",
     "startHour": 6,
     "endHour": 14,
-    "slotDurationMinutes": 30,
-    "capacityPerSlot": 3,
-    "daysOfWeek": "MON,TUE,WED,THU,FRI",
+    "capacity": 20,
+    "daysOfWeek": "1,2,3,4,5",
     "validFrom": "2025-01-01"
   }'
 ```
+
+The `capacity` is the total number of services this window can handle. Slot duration is derived automatically:
+- `numberOfSlots = capacity / parallelism` (integer division)
+- `slotDuration = windowMinutes / numberOfSlots`
+- `slot.capacity = parallelism`
+
+Example: 8-hour window (480 min), capacity=20, parallelism=5 → 4 slots of 120 min, each with capacity=5.
+
+Days of week use ISO numeric codes: 1=Monday through 7=Sunday.
 
 ### 3a. Generate Slots (manual, one-off)
 
