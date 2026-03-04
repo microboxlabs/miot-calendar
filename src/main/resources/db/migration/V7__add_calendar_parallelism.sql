@@ -15,8 +15,10 @@ ALTER TABLE cld_time_windows
 
 -- Backfill: convert per-slot capacity to total window capacity
 -- total = old_per_slot * number_of_slots_in_window
+-- Use CEIL to match the generator loop which creates a slot at each offset
+-- while the start time is still before endHour (e.g., 120min/45min → 3 slots, not 2)
 UPDATE cld_time_windows
-SET capacity = capacity * (((end_hour - start_hour) * 60) / slot_duration_minutes)
+SET capacity = capacity * CEIL(((end_hour - start_hour) * 60.0) / slot_duration_minutes)
 WHERE true;
 
 -- Update CHECK constraint for new column name
