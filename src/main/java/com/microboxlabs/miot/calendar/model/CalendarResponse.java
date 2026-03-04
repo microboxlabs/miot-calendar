@@ -30,6 +30,9 @@ public record CalendarResponse(
     @Schema(required = true, description = "Whether the calendar is active")
     Boolean active,
 
+    @Schema(required = true, description = "Number of parallel resources per slot", minimum = "1")
+    Integer parallelism,
+
     @Schema(required = true, description = "Timestamp when the calendar was created", format = "date-time")
     ZonedDateTime createdAt,
 
@@ -56,6 +59,7 @@ public record CalendarResponse(
             calendar.description,
             calendar.timezone,
             calendar.active,
+            calendar.parallelism,
             calendar.createdAt,
             calendar.updatedAt,
             groupResponses,

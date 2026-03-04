@@ -74,8 +74,7 @@ class SlotResourceTest {
                     "name": "Test Window",
                     "startHour": 9,
                     "endHour": 17,
-                    "slotDurationMinutes": 30,
-                    "capacityPerSlot": 3,
+                    "capacity": 16,
                     "daysOfWeek": "1,2,3,4,5,6,7",
                     "validFrom": "%s"
                 }

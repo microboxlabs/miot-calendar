@@ -24,6 +24,10 @@ public record CalendarRequest(
     @Schema(description = "Whether the calendar is active and accepting bookings", defaultValue = "true")
     Boolean active,
 
+    @Schema(description = "Number of parallel resources the calendar can handle per slot (e.g., loading docks)",
+        minimum = "1", examples = {"5"}, defaultValue = "1")
+    Integer parallelism,
+
     @Schema(description = "List of group codes to assign. null = no change; [] = remove all; [\"code1\"] = replace all")
     List<String> groups,
 
@@ -39,6 +43,9 @@ public record CalendarRequest(
         }
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("Calendar name is required");
+        }
+        if (parallelism != null && parallelism < 1) {
+            throw new IllegalArgumentException("Parallelism must be at least 1");
         }
     }
 }

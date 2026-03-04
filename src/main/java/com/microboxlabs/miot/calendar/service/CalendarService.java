@@ -97,7 +97,8 @@ public class CalendarService {
         calendar.description = request.description();
         calendar.timezone = request.timezone() != null ? request.timezone() : "America/Santiago";
         calendar.active = request.active() != null ? request.active() : true;
-        
+        calendar.parallelism = request.parallelism() != null ? request.parallelism() : 1;
+
         calendar.persist();
 
         if (request.groups() != null && !request.groups().isEmpty()) {
@@ -126,26 +127,16 @@ public class CalendarService {
             throw new IllegalArgumentException("Calendar not found: " + id);
         }
 
-        // Check if new code conflicts with existing
-        if (request.code() != null && !request.code().equals(calendar.code)) {
-            Calendar existing = Calendar.findByCode(request.code());
-            if (existing != null && !existing.id.equals(id)) {
-                throw new IllegalArgumentException("Calendar with code '" + request.code() + "' already exists");
-            }
-            calendar.code = request.code();
-        }
+        updateCalendarCode(id, request, calendar);
+        if (request.name() != null)        calendar.name = request.name();
+        if (request.description() != null) calendar.description = request.description();
+        if (request.timezone() != null)    calendar.timezone = request.timezone();
+        if (request.active() != null)      calendar.active = request.active();
 
-        if (request.name() != null) {
-            calendar.name = request.name();
-        }
-        if (request.description() != null) {
-            calendar.description = request.description();
-        }
-        if (request.timezone() != null) {
-            calendar.timezone = request.timezone();
-        }
-        if (request.active() != null) {
-            calendar.active = request.active();
+        boolean parallelismChanged = request.parallelism() != null
+                && !request.parallelism().equals(calendar.parallelism);
+        if (parallelismChanged) {
+            calendar.parallelism = request.parallelism();
         }
 
         if (request.groups() != null) {
@@ -155,8 +146,43 @@ public class CalendarService {
             }
         }
 
+        if (parallelismChanged) {
+            reprocessSlotsForParallelismChange(id);
+        }
+
         LOG.infof("Updated calendar: %s (%s)", calendar.name, calendar.code);
         return calendar;
+    }
+
+    private void updateCalendarCode(UUID id, CalendarRequest request, Calendar calendar) {
+        if (request.code() == null || request.code().equals(calendar.code)) {
+            return;
+        }
+        Calendar existing = Calendar.findByCode(request.code());
+        if (existing != null && !existing.id.equals(id)) {
+            throw new IllegalArgumentException("Calendar with code '" + request.code() + "' already exists");
+        }
+        calendar.code = request.code();
+    }
+
+    private void reprocessSlotsForParallelismChange(UUID calendarId) {
+        List<TimeWindow> timeWindows = TimeWindow.findActiveByCalendarId(calendarId);
+        for (TimeWindow tw : timeWindows) {
+            tw.slotDurationMinutes = tw.computeSlotDurationMinutes();
+        }
+        triggerSlotManagerReprocess(calendarId);
+    }
+
+    private void triggerSlotManagerReprocess(UUID calendarId) {
+        SlotManager manager = SlotManager.findByCalendarId(calendarId);
+        if (manager == null || !Boolean.TRUE.equals(manager.active)) {
+            return;
+        }
+        if (manager.generatedThrough != null) {
+            manager.reprocessFrom = LocalDate.now();
+            manager.reprocessTo   = manager.generatedThrough;
+        }
+        slotManagerTrigger.fire(new SlotManagerTriggerEvent(manager.id, "API"));
     }
 
     /**
@@ -228,27 +254,16 @@ public class CalendarService {
         timeWindow.name = request.name();
         timeWindow.startHour = request.startHour();
         timeWindow.endHour = request.endHour();
-        timeWindow.slotDurationMinutes = request.slotDurationMinutes() != null ? request.slotDurationMinutes() : 30;
-        timeWindow.capacityPerSlot = request.capacityPerSlot() != null ? request.capacityPerSlot() : 1;
+        timeWindow.capacity = request.capacity() != null ? request.capacity() : 1;
         timeWindow.daysOfWeek = request.daysOfWeek() != null ? request.daysOfWeek() : "1,2,3,4,5";
+        timeWindow.slotDurationMinutes = timeWindow.computeSlotDurationMinutes();
         timeWindow.validFrom = request.validFrom();
         timeWindow.validTo = request.validTo();
         timeWindow.active = request.active() != null ? request.active() : true;
 
         timeWindow.persist();
         LOG.infof("Created time window: %s for calendar %s", timeWindow.name, calendar.code);
-
-        SlotManager manager = SlotManager.findByCalendarId(calendarId);
-        if (manager != null && Boolean.TRUE.equals(manager.active)) {
-            // If the manager already generated slots through a future date, force a
-            // reprocess so this new time window's slots are created for the full range.
-            if (manager.generatedThrough != null) {
-                manager.reprocessFrom = LocalDate.now();
-                manager.reprocessTo   = manager.generatedThrough;
-            }
-            slotManagerTrigger.fire(new SlotManagerTriggerEvent(manager.id, "API"));
-        }
-
+        triggerSlotManagerReprocess(calendarId);
         return timeWindow;
     }
 
@@ -262,46 +277,26 @@ public class CalendarService {
             throw new IllegalArgumentException("Time window not found: " + timeWindowId);
         }
 
-        if (request.name() != null) {
-            timeWindow.name = request.name();
-        }
-        if (request.startHour() != null) {
-            timeWindow.startHour = request.startHour();
-        }
-        if (request.endHour() != null) {
-            timeWindow.endHour = request.endHour();
-        }
-        if (request.slotDurationMinutes() != null) {
-            timeWindow.slotDurationMinutes = request.slotDurationMinutes();
-        }
-        if (request.capacityPerSlot() != null) {
-            timeWindow.capacityPerSlot = request.capacityPerSlot();
-        }
-        if (request.daysOfWeek() != null) {
-            timeWindow.daysOfWeek = request.daysOfWeek();
-        }
-        if (request.validFrom() != null) {
-            timeWindow.validFrom = request.validFrom();
-        }
-        if (request.validTo() != null) {
-            timeWindow.validTo = request.validTo();
-        }
-        if (request.active() != null) {
-            timeWindow.active = request.active();
+        boolean needsRecompute = applyTimeWindowFields(timeWindow, request);
+        if (needsRecompute) {
+            timeWindow.slotDurationMinutes = timeWindow.computeSlotDurationMinutes();
         }
 
         LOG.infof("Updated time window: %s", timeWindow.name);
-
-        SlotManager manager = SlotManager.findByCalendarId(timeWindow.calendar.id);
-        if (manager != null && Boolean.TRUE.equals(manager.active)) {
-            // Force a reprocess so updated schedule rules apply to already-generated dates.
-            if (manager.generatedThrough != null) {
-                manager.reprocessFrom = LocalDate.now();
-                manager.reprocessTo   = manager.generatedThrough;
-            }
-            slotManagerTrigger.fire(new SlotManagerTriggerEvent(manager.id, "API"));
-        }
-
+        triggerSlotManagerReprocess(timeWindow.calendar.id);
         return timeWindow;
+    }
+
+    private boolean applyTimeWindowFields(TimeWindow tw, TimeWindowRequest request) {
+        boolean needsRecompute = false;
+        if (request.name() != null)      tw.name = request.name();
+        if (request.startHour() != null)  { tw.startHour = request.startHour(); needsRecompute = true; }
+        if (request.endHour() != null)    { tw.endHour = request.endHour();     needsRecompute = true; }
+        if (request.capacity() != null)   { tw.capacity = request.capacity();   needsRecompute = true; }
+        if (request.daysOfWeek() != null) tw.daysOfWeek = request.daysOfWeek();
+        if (request.validFrom() != null)  tw.validFrom = request.validFrom();
+        if (request.validTo() != null)    tw.validTo = request.validTo();
+        if (request.active() != null)     tw.active = request.active();
+        return needsRecompute;
     }
 }

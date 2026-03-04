@@ -27,11 +27,11 @@ public record TimeWindowResponse(
     @Schema(required = true, description = "End hour of the time window (exclusive)", minimum = "0", maximum = "23", examples = {"12"})
     Integer endHour,
 
-    @Schema(required = true, description = "Duration of each slot in minutes", minimum = "1", examples = {"30"})
+    @Schema(required = true, description = "Duration of each slot in minutes (derived from capacity model)", minimum = "1", examples = {"60"})
     Integer slotDurationMinutes,
 
-    @Schema(required = true, description = "Maximum number of bookings per slot", minimum = "1", examples = {"5"})
-    Integer capacityPerSlot,
+    @Schema(required = true, description = "Total number of services this window can handle across all slots", minimum = "1", examples = {"20"})
+    Integer capacity,
 
     @Schema(required = true, description = "Comma-separated days of the week (1=Monday to 7=Sunday)", examples = {"1,2,3,4,5"})
     String daysOfWeek,
@@ -62,7 +62,7 @@ public record TimeWindowResponse(
             timeWindow.startHour,
             timeWindow.endHour,
             timeWindow.slotDurationMinutes,
-            timeWindow.capacityPerSlot,
+            timeWindow.capacity,
             timeWindow.daysOfWeek,
             timeWindow.validFrom,
             timeWindow.validTo,
