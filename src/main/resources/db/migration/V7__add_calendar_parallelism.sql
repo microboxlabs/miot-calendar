@@ -16,7 +16,8 @@ ALTER TABLE cld_time_windows
 -- Backfill: convert per-slot capacity to total window capacity
 -- total = old_per_slot * number_of_slots_in_window
 UPDATE cld_time_windows
-SET capacity = capacity * (((end_hour - start_hour) * 60) / slot_duration_minutes);
+SET capacity = capacity * (((end_hour - start_hour) * 60) / slot_duration_minutes)
+WHERE true;
 
 -- Update CHECK constraint for new column name
 ALTER TABLE cld_time_windows
