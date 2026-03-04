@@ -18,11 +18,8 @@ public record TimeWindowRequest(
     @Schema(required = true, description = "End hour of the time window (exclusive)", minimum = "0", maximum = "23", examples = {"12"})
     Integer endHour,
 
-    @Schema(description = "Duration of each slot in minutes", minimum = "1", examples = {"30"}, defaultValue = "30")
-    Integer slotDurationMinutes,
-
-    @Schema(description = "Maximum number of bookings per slot", minimum = "1", examples = {"5"}, defaultValue = "1")
-    Integer capacityPerSlot,
+    @Schema(description = "Total number of services this window can handle across all slots", minimum = "1", examples = {"20"}, defaultValue = "1")
+    Integer capacity,
 
     @Schema(description = "Comma-separated days of the week (1=Monday to 7=Sunday)", examples = {"1,2,3,4,5"})
     String daysOfWeek,
@@ -54,6 +51,9 @@ public record TimeWindowRequest(
         }
         if (validTo != null && validTo.isBefore(validFrom)) {
             throw new IllegalArgumentException("Valid to date must be after valid from date");
+        }
+        if (capacity != null && capacity < 1) {
+            throw new IllegalArgumentException("Capacity must be at least 1");
         }
     }
 }

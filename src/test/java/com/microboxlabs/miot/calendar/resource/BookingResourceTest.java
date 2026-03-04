@@ -53,13 +53,14 @@ class BookingResourceTest {
         setupDone = true;
         slotDate = LocalDate.now().plusDays(1);
 
-        // Create a calendar
+        // Create a calendar with parallelism=2 (2 resources per slot)
         calendarId = given()
             .contentType(ContentType.JSON)
             .body("""
                 {
                     "code": "booking-test-calendar",
-                    "name": "Booking Test Calendar"
+                    "name": "Booking Test Calendar",
+                    "parallelism": 2
                 }
                 """)
             .when()
@@ -69,7 +70,8 @@ class BookingResourceTest {
             .extract()
             .path("id");
 
-        // Create a time window
+        // Create a time window: 9-17 (480min), capacity=32, parallelism=2
+        // → 32/2=16 slots, 480/16=30min each, slot.capacity=2
         given()
             .contentType(ContentType.JSON)
             .body(String.format("""
@@ -77,8 +79,7 @@ class BookingResourceTest {
                     "name": "Booking Test Window",
                     "startHour": 9,
                     "endHour": 17,
-                    "slotDurationMinutes": 30,
-                    "capacityPerSlot": 2,
+                    "capacity": 32,
                     "daysOfWeek": "1,2,3,4,5,6,7",
                     "validFrom": "%s"
                 }

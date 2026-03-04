@@ -99,8 +99,7 @@ class SlotGenerationTest {
                     "name": "Weekday Morning",
                     "startHour": 8,
                     "endHour": 12,
-                    "slotDurationMinutes": 60,
-                    "capacityPerSlot": 1,
+                    "capacity": 4,
                     "daysOfWeek": "1,2,3,4,5",
                     "validFrom": "%s"
                 }

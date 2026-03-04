@@ -97,7 +97,8 @@ public class CalendarService {
         calendar.description = request.description();
         calendar.timezone = request.timezone() != null ? request.timezone() : "America/Santiago";
         calendar.active = request.active() != null ? request.active() : true;
-        
+        calendar.parallelism = request.parallelism() != null ? request.parallelism() : 1;
+
         calendar.persist();
 
         if (request.groups() != null && !request.groups().isEmpty()) {
@@ -148,10 +149,31 @@ public class CalendarService {
             calendar.active = request.active();
         }
 
+        boolean parallelismChanged = false;
+        if (request.parallelism() != null && !request.parallelism().equals(calendar.parallelism)) {
+            calendar.parallelism = request.parallelism();
+            parallelismChanged = true;
+        }
+
         if (request.groups() != null) {
             calendar.groups.clear();
             if (!request.groups().isEmpty()) {
                 resolveAndAssignGroups(calendar, request.groups());
+            }
+        }
+
+        if (parallelismChanged) {
+            List<TimeWindow> timeWindows = TimeWindow.findActiveByCalendarId(id);
+            for (TimeWindow tw : timeWindows) {
+                tw.slotDurationMinutes = tw.computeSlotDurationMinutes();
+            }
+            SlotManager manager = SlotManager.findByCalendarId(id);
+            if (manager != null && Boolean.TRUE.equals(manager.active)) {
+                if (manager.generatedThrough != null) {
+                    manager.reprocessFrom = LocalDate.now();
+                    manager.reprocessTo   = manager.generatedThrough;
+                }
+                slotManagerTrigger.fire(new SlotManagerTriggerEvent(manager.id, "API"));
             }
         }
 
@@ -228,9 +250,9 @@ public class CalendarService {
         timeWindow.name = request.name();
         timeWindow.startHour = request.startHour();
         timeWindow.endHour = request.endHour();
-        timeWindow.slotDurationMinutes = request.slotDurationMinutes() != null ? request.slotDurationMinutes() : 30;
-        timeWindow.capacityPerSlot = request.capacityPerSlot() != null ? request.capacityPerSlot() : 1;
+        timeWindow.capacity = request.capacity() != null ? request.capacity() : 1;
         timeWindow.daysOfWeek = request.daysOfWeek() != null ? request.daysOfWeek() : "1,2,3,4,5";
+        timeWindow.slotDurationMinutes = timeWindow.computeSlotDurationMinutes();
         timeWindow.validFrom = request.validFrom();
         timeWindow.validTo = request.validTo();
         timeWindow.active = request.active() != null ? request.active() : true;
@@ -265,17 +287,21 @@ public class CalendarService {
         if (request.name() != null) {
             timeWindow.name = request.name();
         }
+        boolean needsRecompute = false;
         if (request.startHour() != null) {
             timeWindow.startHour = request.startHour();
+            needsRecompute = true;
         }
         if (request.endHour() != null) {
             timeWindow.endHour = request.endHour();
+            needsRecompute = true;
         }
-        if (request.slotDurationMinutes() != null) {
-            timeWindow.slotDurationMinutes = request.slotDurationMinutes();
+        if (request.capacity() != null) {
+            timeWindow.capacity = request.capacity();
+            needsRecompute = true;
         }
-        if (request.capacityPerSlot() != null) {
-            timeWindow.capacityPerSlot = request.capacityPerSlot();
+        if (needsRecompute) {
+            timeWindow.slotDurationMinutes = timeWindow.computeSlotDurationMinutes();
         }
         if (request.daysOfWeek() != null) {
             timeWindow.daysOfWeek = request.daysOfWeek();

@@ -122,7 +122,7 @@ public class SlotManagerExecutor {
                 if (batchEnd.isAfter(to)) batchEnd = to;
 
                 GenerateSlotsResponse resp = slotGeneratorService.generateSlots(
-                    snap.calendarId(), batchStart, batchEnd);
+                    snap.calendarId(), batchStart, batchEnd, isReprocess);
                 totalCreated += resp.slotsCreated();
                 totalSkipped += resp.slotsSkipped();
 

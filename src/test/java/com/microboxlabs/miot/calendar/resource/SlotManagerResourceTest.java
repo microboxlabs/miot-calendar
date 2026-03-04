@@ -70,8 +70,7 @@ class SlotManagerResourceTest {
                     "name": "All Day Window",
                     "startHour": 8,
                     "endHour": 12,
-                    "slotDurationMinutes": 60,
-                    "capacityPerSlot": 2,
+                    "capacity": 4,
                     "daysOfWeek": "1,2,3,4,5,6,7",
                     "validFrom": "%s"
                 }

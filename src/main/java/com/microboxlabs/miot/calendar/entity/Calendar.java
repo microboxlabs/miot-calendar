@@ -39,6 +39,9 @@ public class Calendar extends PanacheEntityBase {
     @Column(name = "active")
     public Boolean active = true;
 
+    @Column(name = "parallelism", nullable = false)
+    public Integer parallelism = 1;
+
     @Column(name = "created_at", nullable = false)
     public ZonedDateTime createdAt;
 

@@ -74,8 +74,7 @@ class SlotGenerationLifecycleTest {
                     "name": "Lifecycle Test Window",
                     "startHour": 9,
                     "endHour": 11,
-                    "slotDurationMinutes": 60,
-                    "capacityPerSlot": 1,
+                    "capacity": 2,
                     "daysOfWeek": "%s",
                     "validFrom": "%s"
                 }
@@ -242,7 +241,6 @@ class SlotGenerationLifecycleTest {
                     "name": "Default Days Window",
                     "startHour": 9,
                     "endHour": 10,
-                    "slotDurationMinutes": 60,
                     "validFrom": "%s"
                 }
                 """, QUERY_FROM))

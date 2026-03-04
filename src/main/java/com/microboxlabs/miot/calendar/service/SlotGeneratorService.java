@@ -23,10 +23,20 @@ public class SlotGeneratorService {
     private static final Logger LOG = Logger.getLogger(SlotGeneratorService.class);
 
     /**
-     * Generate slots for a calendar within a date range
+     * Generate slots for a calendar within a date range.
      */
     @Transactional
     public GenerateSlotsResponse generateSlots(UUID calendarId, LocalDate startDate, LocalDate endDate) {
+        return generateSlots(calendarId, startDate, endDate, false);
+    }
+
+    /**
+     * Generate slots for a calendar within a date range.
+     * @param reprocess if true, delete unbooked slots first so they are regenerated
+     *                  with the current capacity/duration configuration
+     */
+    @Transactional
+    public GenerateSlotsResponse generateSlots(UUID calendarId, LocalDate startDate, LocalDate endDate, boolean reprocess) {
         Calendar calendar = Calendar.findById(calendarId);
         if (calendar == null) {
             throw new IllegalArgumentException("Calendar not found: " + calendarId);
@@ -36,6 +46,12 @@ public class SlotGeneratorService {
         if (timeWindows.isEmpty()) {
             LOG.warnf("No active time windows found for calendar %s", calendarId);
             return GenerateSlotsResponse.of(0, 0);
+        }
+
+        if (reprocess) {
+            long deleted = Slot.deleteUnbookedByCalendarAndDateRange(calendarId, startDate, endDate);
+            LOG.infof("Reprocess: deleted %d unbooked slots for calendar %s (%s to %s)",
+                deleted, calendarId, startDate, endDate);
         }
 
         int created = 0;
@@ -71,7 +87,7 @@ public class SlotGeneratorService {
                         slot.slotDate = date;
                         slot.slotHour = hour;
                         slot.slotMinutes = minutes;
-                        slot.capacity = timeWindow.capacityPerSlot;
+                        slot.capacity = calendar.parallelism;
                         slot.currentOccupancy = 0;
                         slot.status = SlotStatus.OPEN;
                         slot.persist();

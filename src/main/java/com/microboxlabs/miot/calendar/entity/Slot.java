@@ -111,6 +111,15 @@ public class Slot extends PanacheEntityBase {
     }
 
     /**
+     * Delete unbooked slots for a calendar within a date range.
+     * Only removes slots with currentOccupancy = 0 to preserve existing bookings.
+     */
+    public static long deleteUnbookedByCalendarAndDateRange(UUID calendarId, LocalDate startDate, LocalDate endDate) {
+        return delete("calendar.id = ?1 and slotDate >= ?2 and slotDate <= ?3 and currentOccupancy = 0",
+                calendarId, startDate, endDate);
+    }
+
+    /**
      * Check if slot has availability
      */
     public boolean hasAvailability() {

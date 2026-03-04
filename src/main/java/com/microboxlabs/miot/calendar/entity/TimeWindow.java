@@ -39,8 +39,8 @@ public class TimeWindow extends PanacheEntityBase {
     @Column(name = "slot_duration_minutes", nullable = false)
     public Integer slotDurationMinutes = 30;
 
-    @Column(name = "capacity_per_slot", nullable = false)
-    public Integer capacityPerSlot = 1;
+    @Column(name = "capacity", nullable = false)
+    public Integer capacity = 1;
 
     @Column(name = "days_of_week", length = 50)
     public String daysOfWeek = "1,2,3,4,5";
@@ -71,6 +71,19 @@ public class TimeWindow extends PanacheEntityBase {
     @PreUpdate
     public void preUpdate() {
         updatedAt = ZonedDateTime.now();
+    }
+
+    /**
+     * Derive slot duration from the window duration and capacity model.
+     * numberOfSlots = capacity / parallelism (integer division)
+     * slotDuration  = windowMinutes / numberOfSlots (integer division, min 1)
+     */
+    public int computeSlotDurationMinutes() {
+        int windowMinutes = (endHour - startHour) * 60;
+        int numberOfSlots = capacity / calendar.parallelism;
+        if (numberOfSlots <= 0) numberOfSlots = 1;
+        int duration = windowMinutes / numberOfSlots;
+        return Math.max(duration, 1);
     }
 
     // Finder methods

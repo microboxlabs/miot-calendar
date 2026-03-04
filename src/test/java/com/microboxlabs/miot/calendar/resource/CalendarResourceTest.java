@@ -109,9 +109,8 @@ class CalendarResourceTest {
                     "name": "Morning Shift",
                     "startHour": 8,
                     "endHour": 12,
-                    "slotDurationMinutes": 30,
-                    "capacityPerSlot": 2,
-                    "daysOfWeek": "MON,TUE,WED,THU,FRI",
+                    "capacity": 8,
+                    "daysOfWeek": "1,2,3,4,5",
                     "validFrom": "2025-01-01"
                 }
                 """)
