@@ -241,4 +241,130 @@ class CalendarResourceTest {
             .then()
             .statusCode(404);
     }
+
+    @Test
+    void testCreateCalendarWithFilter() {
+        String id = given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "code": "filter-create",
+                    "name": "Filter Create",
+                    "timezone": "America/Santiago",
+                    "filter": {"origin": "ANF", "destination": "SCL"}
+                }
+                """)
+            .when()
+            .post("/api/v1/miot-calendar/calendars")
+            .then()
+            .statusCode(201)
+            .body("filter.origin", equalTo("ANF"))
+            .body("filter.destination", equalTo("SCL"))
+            .extract()
+            .path("id");
+
+        given()
+            .when()
+            .get("/api/v1/miot-calendar/calendars/" + id)
+            .then()
+            .statusCode(200)
+            .body("filter.origin", equalTo("ANF"))
+            .body("filter.destination", equalTo("SCL"));
+    }
+
+    @Test
+    void testUpdateCalendarFilterReplaceAndClear() {
+        String id = given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "code": "filter-update",
+                    "name": "Filter Update",
+                    "timezone": "America/Santiago",
+                    "filter": {"origin": "ANF"}
+                }
+                """)
+            .when()
+            .post("/api/v1/miot-calendar/calendars")
+            .then()
+            .statusCode(201)
+            .extract()
+            .path("id");
+
+        // Replace
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                { "filter": {"destination": "VAL"} }
+                """)
+            .when()
+            .put("/api/v1/miot-calendar/calendars/" + id)
+            .then()
+            .statusCode(200)
+            .body("filter.origin", nullValue())
+            .body("filter.destination", equalTo("VAL"));
+
+        // Clear via empty object → null
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                { "filter": {} }
+                """)
+            .when()
+            .put("/api/v1/miot-calendar/calendars/" + id)
+            .then()
+            .statusCode(200)
+            .body("filter", nullValue());
+
+        // Omit field → no change (still null)
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                { "name": "Filter Update Renamed" }
+                """)
+            .when()
+            .put("/api/v1/miot-calendar/calendars/" + id)
+            .then()
+            .statusCode(200)
+            .body("name", equalTo("Filter Update Renamed"))
+            .body("filter", nullValue());
+    }
+
+    @Test
+    void testCreateCalendarRejectsUnknownFilterKey() {
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "code": "filter-bad-key",
+                    "name": "Filter Bad Key",
+                    "timezone": "UTC",
+                    "filter": {"carrier": "X"}
+                }
+                """)
+            .when()
+            .post("/api/v1/miot-calendar/calendars")
+            .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void testCreateCalendarBlankFilterValueDropped() {
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "code": "filter-blank",
+                    "name": "Filter Blank",
+                    "timezone": "UTC",
+                    "filter": {"origin": "ANF", "destination": "  "}
+                }
+                """)
+            .when()
+            .post("/api/v1/miot-calendar/calendars")
+            .then()
+            .statusCode(201)
+            .body("filter.origin", equalTo("ANF"))
+            .body("filter.destination", nullValue());
+    }
 }

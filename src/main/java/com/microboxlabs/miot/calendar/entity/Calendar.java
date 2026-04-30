@@ -2,10 +2,13 @@ package com.microboxlabs.miot.calendar.entity;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -41,6 +44,10 @@ public class Calendar extends PanacheEntityBase {
 
     @Column(name = "parallelism", nullable = false)
     public Integer parallelism = 1;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "filter", columnDefinition = "jsonb")
+    public Map<String, String> filter;
 
     @Column(name = "created_at", nullable = false)
     public ZonedDateTime createdAt;

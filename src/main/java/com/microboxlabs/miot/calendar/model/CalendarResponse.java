@@ -5,6 +5,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -42,6 +43,11 @@ public record CalendarResponse(
     @Schema(description = "Groups this calendar belongs to")
     List<CalendarGroupResponse> groups,
 
+    @Schema(description = "Optional task filter map applied to client-side task lists tied to this calendar. " +
+        "Keys are drawn from the allowed set (origin, destination).",
+        examples = {"{\"origin\":\"ANF\"}"})
+    Map<String, String> filter,
+
     @Schema(description = "Whether this calendar has a SlotManager provisioned")
     Boolean hasSlotManager
 ) {
@@ -63,6 +69,7 @@ public record CalendarResponse(
             calendar.createdAt,
             calendar.updatedAt,
             groupResponses,
+            calendar.filter,
             hasSlotManager
         );
     }

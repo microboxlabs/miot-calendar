@@ -15,7 +15,9 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -98,6 +100,7 @@ public class CalendarService {
         calendar.timezone = request.timezone() != null ? request.timezone() : "America/Santiago";
         calendar.active = request.active() != null ? request.active() : true;
         calendar.parallelism = request.parallelism() != null ? request.parallelism() : 1;
+        calendar.filter = sanitizeFilter(request.filter());
 
         calendar.persist();
 
@@ -144,6 +147,10 @@ public class CalendarService {
             if (!request.groups().isEmpty()) {
                 resolveAndAssignGroups(calendar, request.groups());
             }
+        }
+
+        if (request.filter() != null) {
+            calendar.filter = sanitizeFilter(request.filter());
         }
 
         if (parallelismChanged) {
@@ -213,6 +220,23 @@ public class CalendarService {
         // Step 2: Delete the calendar (JPA cascade deletes TimeWindows; DB cascade deletes SlotManager+Runs+GroupMembers)
         calendar.delete();
         LOG.infof("Hard deleted calendar: %s (%s)", calendar.name, calendar.code);
+    }
+
+    /**
+     * Drop blank/null entries and detach from the request map. Returns null when nothing remains
+     * so the JSONB column stores SQL NULL instead of an empty object.
+     */
+    private Map<String, String> sanitizeFilter(Map<String, String> input) {
+        if (input == null || input.isEmpty()) {
+            return null;
+        }
+        Map<String, String> clean = new HashMap<>();
+        for (Map.Entry<String, String> e : input.entrySet()) {
+            if (e.getValue() != null && !e.getValue().isBlank()) {
+                clean.put(e.getKey(), e.getValue());
+            }
+        }
+        return clean.isEmpty() ? null : clean;
     }
 
     /**
