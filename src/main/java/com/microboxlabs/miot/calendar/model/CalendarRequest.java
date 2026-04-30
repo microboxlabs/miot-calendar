@@ -3,6 +3,8 @@ package com.microboxlabs.miot.calendar.model;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Request to create or update a calendar
@@ -31,9 +33,16 @@ public record CalendarRequest(
     @Schema(description = "List of group codes to assign. null = no change; [] = remove all; [\"code1\"] = replace all")
     List<String> groups,
 
+    @Schema(description = "Optional task filter map applied to client-side task lists tied to this calendar. " +
+        "null = no change; {} = clear; populated map = replace. Allowed keys: origin, destination.",
+        examples = {"{\"origin\":\"ANF\"}"})
+    Map<String, String> filter,
+
     @Schema(description = "Whether to auto-provision a default SlotManager on creation. Defaults to true when null.", defaultValue = "true")
     Boolean autoSlotManager
 ) {
+    public static final Set<String> ALLOWED_FILTER_KEYS = Set.of("origin", "destination");
+
     /**
      * Validate the calendar request
      */
@@ -46,6 +55,14 @@ public record CalendarRequest(
         }
         if (parallelism != null && parallelism < 1) {
             throw new IllegalArgumentException("Parallelism must be at least 1");
+        }
+        if (filter != null) {
+            for (String key : filter.keySet()) {
+                if (!ALLOWED_FILTER_KEYS.contains(key)) {
+                    throw new IllegalArgumentException(
+                        "Unknown filter key '" + key + "'. Allowed: " + ALLOWED_FILTER_KEYS);
+                }
+            }
         }
     }
 }
