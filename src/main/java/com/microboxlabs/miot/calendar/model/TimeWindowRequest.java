@@ -31,7 +31,10 @@ public record TimeWindowRequest(
     LocalDate validTo,
 
     @Schema(description = "Whether the time window is active", defaultValue = "true")
-    Boolean active
+    Boolean active,
+
+    @Schema(description = "UI color token for displaying this time window (e.g., \"emerald\", \"amber\")", examples = {"emerald"}, maxLength = 32)
+    String color
 ) {
     /**
      * Validate the time window request

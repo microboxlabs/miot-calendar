@@ -25,21 +25,22 @@ import java.util.UUID;
  * Service for calendar operations
  */
 @ApplicationScoped
+@SuppressWarnings("java:S3252") // Panache active-record requires static calls on the entity subclass
 public class CalendarService {
 
     private static final Logger LOG = Logger.getLogger(CalendarService.class);
 
-    @Inject
-    CalendarGroupService calendarGroupService;
-
+    private final CalendarGroupService calendarGroupService;
     private final Event<SlotManagerTriggerEvent> slotManagerTrigger;
     private final SlotManagerService slotManagerService;
 
     @Inject
     public CalendarService(SlotManagerService slotManagerService,
-                           Event<SlotManagerTriggerEvent> slotManagerTrigger) {
+                           Event<SlotManagerTriggerEvent> slotManagerTrigger,
+                           CalendarGroupService calendarGroupService) {
         this.slotManagerService = slotManagerService;
         this.slotManagerTrigger = slotManagerTrigger;
+        this.calendarGroupService = calendarGroupService;
     }
 
     /**
@@ -226,6 +227,7 @@ public class CalendarService {
      * Drop blank/null entries and detach from the request map. Returns null when nothing remains
      * so the JSONB column stores SQL NULL instead of an empty object.
      */
+    @SuppressWarnings("java:S1168") // intentional null so JPA writes SQL NULL to the JSONB filter column
     private Map<String, String> sanitizeFilter(Map<String, String> input) {
         if (input == null || input.isEmpty()) {
             return null;
@@ -284,6 +286,7 @@ public class CalendarService {
         timeWindow.validFrom = request.validFrom();
         timeWindow.validTo = request.validTo();
         timeWindow.active = request.active() != null ? request.active() : true;
+        timeWindow.color = request.color();
 
         timeWindow.persist();
         LOG.infof("Created time window: %s for calendar %s", timeWindow.name, calendar.code);
@@ -321,6 +324,7 @@ public class CalendarService {
         if (request.validFrom() != null)  tw.validFrom = request.validFrom();
         if (request.validTo() != null)    tw.validTo = request.validTo();
         if (request.active() != null)     tw.active = request.active();
+        if (request.color() != null)      tw.color = request.color();
         return needsRecompute;
     }
 }

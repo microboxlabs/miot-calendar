@@ -54,6 +54,9 @@ public class TimeWindow extends PanacheEntityBase {
     @Column(name = "active")
     public Boolean active = true;
 
+    @Column(name = "color", length = 32)
+    public String color;
+
     @Column(name = "created_at", nullable = false)
     public ZonedDateTime createdAt;
 
