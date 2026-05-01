@@ -284,6 +284,7 @@ public class CalendarService {
         timeWindow.validFrom = request.validFrom();
         timeWindow.validTo = request.validTo();
         timeWindow.active = request.active() != null ? request.active() : true;
+        timeWindow.color = request.color();
 
         timeWindow.persist();
         LOG.infof("Created time window: %s for calendar %s", timeWindow.name, calendar.code);
@@ -321,6 +322,7 @@ public class CalendarService {
         if (request.validFrom() != null)  tw.validFrom = request.validFrom();
         if (request.validTo() != null)    tw.validTo = request.validTo();
         if (request.active() != null)     tw.active = request.active();
+        if (request.color() != null)      tw.color = request.color();
         return needsRecompute;
     }
 }
