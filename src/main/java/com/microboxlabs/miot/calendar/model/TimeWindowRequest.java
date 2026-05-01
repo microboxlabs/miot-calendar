@@ -61,14 +61,16 @@ public record TimeWindowRequest(
         if (validTo != null && validTo.isBefore(validFrom)) {
             throw new IllegalArgumentException("Valid to date must be after valid from date");
         }
-        if (capacity != null) {
-            if (kind == TimeWindowKind.BLOCK) {
-                if (capacity < 0) {
-                    throw new IllegalArgumentException("Capacity must be at least 0 for BLOCK windows");
-                }
-            } else if (capacity < 1) {
-                throw new IllegalArgumentException("Capacity must be at least 1");
-            }
+        validateCapacity();
+    }
+
+    private void validateCapacity() {
+        if (capacity == null) {
+            return;
+        }
+        int min = kind == TimeWindowKind.BLOCK ? 0 : 1;
+        if (capacity < min) {
+            throw new IllegalArgumentException("Capacity must be at least " + min);
         }
     }
 }
