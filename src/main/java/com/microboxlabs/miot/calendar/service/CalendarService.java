@@ -7,6 +7,7 @@ import com.microboxlabs.miot.calendar.entity.SlotManager;
 import com.microboxlabs.miot.calendar.entity.TimeWindow;
 import com.microboxlabs.miot.calendar.model.CalendarRequest;
 import com.microboxlabs.miot.calendar.model.SlotManagerTriggerEvent;
+import com.microboxlabs.miot.calendar.model.TimeWindowKind;
 import com.microboxlabs.miot.calendar.model.TimeWindowRequest;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
@@ -280,10 +281,8 @@ public class CalendarService {
         timeWindow.name = request.name();
         timeWindow.startHour = request.startHour();
         timeWindow.endHour = request.endHour();
-        timeWindow.kind = request.kind() != null ? request.kind() : com.microboxlabs.miot.calendar.model.TimeWindowKind.WINDOW;
-        timeWindow.capacity = timeWindow.kind == com.microboxlabs.miot.calendar.model.TimeWindowKind.BLOCK
-            ? (request.capacity() != null ? request.capacity() : 0)
-            : (request.capacity() != null ? request.capacity() : 1);
+        timeWindow.kind = request.kind() != null ? request.kind() : TimeWindowKind.WINDOW;
+        timeWindow.capacity = resolveCapacity(request.capacity(), timeWindow.kind);
         timeWindow.daysOfWeek = request.daysOfWeek() != null ? request.daysOfWeek() : "1,2,3,4,5";
         timeWindow.slotDurationMinutes = timeWindow.computeSlotDurationMinutes();
         timeWindow.validFrom = request.validFrom();
@@ -315,6 +314,16 @@ public class CalendarService {
         LOG.infof("Updated time window: %s", timeWindow.name);
         triggerSlotManagerReprocess(timeWindow.calendar.id);
         return timeWindow;
+    }
+
+    /**
+     * Default capacity: WINDOW = 1, BLOCK = 0 (BLOCK rows carry no quota).
+     */
+    private static int resolveCapacity(Integer requested, TimeWindowKind kind) {
+        if (requested != null) {
+            return requested;
+        }
+        return kind == TimeWindowKind.BLOCK ? 0 : 1;
     }
 
     private boolean applyTimeWindowFields(TimeWindow tw, TimeWindowRequest request) {
