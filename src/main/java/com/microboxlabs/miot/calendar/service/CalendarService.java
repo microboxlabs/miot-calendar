@@ -280,7 +280,10 @@ public class CalendarService {
         timeWindow.name = request.name();
         timeWindow.startHour = request.startHour();
         timeWindow.endHour = request.endHour();
-        timeWindow.capacity = request.capacity() != null ? request.capacity() : 1;
+        timeWindow.kind = request.kind() != null ? request.kind() : com.microboxlabs.miot.calendar.model.TimeWindowKind.WINDOW;
+        timeWindow.capacity = timeWindow.kind == com.microboxlabs.miot.calendar.model.TimeWindowKind.BLOCK
+            ? (request.capacity() != null ? request.capacity() : 0)
+            : (request.capacity() != null ? request.capacity() : 1);
         timeWindow.daysOfWeek = request.daysOfWeek() != null ? request.daysOfWeek() : "1,2,3,4,5";
         timeWindow.slotDurationMinutes = timeWindow.computeSlotDurationMinutes();
         timeWindow.validFrom = request.validFrom();
@@ -325,6 +328,7 @@ public class CalendarService {
         if (request.validTo() != null)    tw.validTo = request.validTo();
         if (request.active() != null)     tw.active = request.active();
         if (request.color() != null)      tw.color = request.color();
+        if (request.kind() != null)      { tw.kind = request.kind();           needsRecompute = true; }
         return needsRecompute;
     }
 }
