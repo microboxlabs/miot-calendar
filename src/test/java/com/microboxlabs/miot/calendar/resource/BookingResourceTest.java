@@ -304,4 +304,87 @@ class BookingResourceTest {
             .then()
             .statusCode(404);
     }
+
+    /**
+     * A booking against a slot covered by a BLOCK time window must be rejected
+     * with the SLOT_CLOSED error (BLOCK windows generate CLOSED slots, which
+     * BookingValidationService already refuses).
+     */
+    @Test
+    @Order(9)
+    void testBookingRejectedOnBlockSlot() {
+        // Fresh calendar so the BLOCK doesn't disturb sibling tests.
+        String blockedCalendarId = given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "code": "blocked-calendar",
+                    "name": "Blocked Calendar",
+                    "parallelism": 1
+                }
+                """)
+            .when()
+            .post("/api/v1/miot-calendar/calendars")
+            .then()
+            .statusCode(201)
+            .extract()
+            .path("id");
+
+        LocalDate blockDate = LocalDate.now().plusDays(2);
+        int dayOfWeek = blockDate.getDayOfWeek().getValue();
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(String.format("""
+                {
+                    "name": "Blocked Period",
+                    "kind": "BLOCK",
+                    "startHour": 10,
+                    "endHour": 12,
+                    "daysOfWeek": "%d",
+                    "validFrom": "%s"
+                }
+                """, dayOfWeek, LocalDate.now()))
+            .when()
+            .post("/api/v1/miot-calendar/calendars/" + blockedCalendarId + "/time-windows")
+            .then()
+            .statusCode(201);
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(String.format("""
+                {
+                    "calendarId": "%s",
+                    "startDate": "%s",
+                    "endDate": "%s"
+                }
+                """, blockedCalendarId, blockDate, blockDate))
+            .when()
+            .post("/api/v1/miot-calendar/slots/generate")
+            .then()
+            .statusCode(200);
+
+        given()
+            .contentType(ContentType.JSON)
+            .header("X-User-Id", "test-user")
+            .body(String.format("""
+                {
+                    "calendarId": "%s",
+                    "resource": {
+                        "id": "SRV-BLOCKED",
+                        "type": "SERVICE",
+                        "label": "Should fail"
+                    },
+                    "slot": {
+                        "date": "%s",
+                        "hour": 10,
+                        "minutes": 0
+                    }
+                }
+                """, blockedCalendarId, blockDate))
+            .when()
+            .post(bookingsUrl.toString())
+            .then()
+            .statusCode(409);
+    }
 }

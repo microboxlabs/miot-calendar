@@ -5,11 +5,13 @@ import com.microboxlabs.miot.calendar.entity.Slot;
 import com.microboxlabs.miot.calendar.entity.TimeWindow;
 import com.microboxlabs.miot.calendar.model.GenerateSlotsResponse;
 import com.microboxlabs.miot.calendar.model.SlotStatus;
+import com.microboxlabs.miot.calendar.model.TimeWindowKind;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -69,10 +71,13 @@ public class SlotGeneratorService {
                                       LocalDate date, int[] counts) {
         String dayOfWeek = String.valueOf(date.getDayOfWeek().getValue());
 
+        // BLOCK windows are processed last so they can override an OPEN slot
+        // already created by a colliding WINDOW (CLOSED wins).
         List<TimeWindow> validWindows = timeWindows.stream()
             .filter(tw -> tw.validFrom.compareTo(date) <= 0)
             .filter(tw -> tw.validTo == null || tw.validTo.compareTo(date) >= 0)
             .filter(tw -> tw.includesDay(dayOfWeek))
+            .sorted(Comparator.comparing(tw -> tw.kind == TimeWindowKind.BLOCK))
             .toList();
 
         for (TimeWindow timeWindow : validWindows) {
@@ -90,6 +95,14 @@ public class SlotGeneratorService {
             if (existing == null) {
                 createSlot(calendar, timeWindow, date, hour, minutes);
                 counts[0]++;
+            } else if (timeWindow.kind == TimeWindowKind.BLOCK
+                    && existing.status == SlotStatus.OPEN
+                    && existing.currentOccupancy == 0) {
+                // BLOCK overrides an unbooked OPEN slot left by a colliding window.
+                existing.status = SlotStatus.CLOSED;
+                existing.timeWindow = timeWindow;
+                existing.capacity = 0;
+                counts[1]++;
             } else {
                 counts[1]++;
             }
@@ -110,9 +123,15 @@ public class SlotGeneratorService {
         slot.slotDate = date;
         slot.slotHour = hour;
         slot.slotMinutes = minutes;
-        slot.capacity = calendar.parallelism;
-        slot.currentOccupancy = 0;
-        slot.status = SlotStatus.OPEN;
+        if (timeWindow.kind == TimeWindowKind.BLOCK) {
+            slot.capacity = 0;
+            slot.currentOccupancy = 0;
+            slot.status = SlotStatus.CLOSED;
+        } else {
+            slot.capacity = calendar.parallelism;
+            slot.currentOccupancy = 0;
+            slot.status = SlotStatus.OPEN;
+        }
         slot.persist();
     }
 }

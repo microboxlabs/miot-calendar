@@ -1,5 +1,6 @@
 package com.microboxlabs.miot.calendar.entity;
 
+import com.microboxlabs.miot.calendar.model.TimeWindowKind;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 
@@ -57,6 +58,10 @@ public class TimeWindow extends PanacheEntityBase {
     @Column(name = "color", length = 32)
     public String color;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kind", nullable = false, length = 16)
+    public TimeWindowKind kind = TimeWindowKind.WINDOW;
+
     @Column(name = "created_at", nullable = false)
     public ZonedDateTime createdAt;
 
@@ -77,11 +82,23 @@ public class TimeWindow extends PanacheEntityBase {
     }
 
     /**
+     * Default slot step for BLOCK windows. Matches the planning grid cell size
+     * so a block paints continuous CLOSED cells across the configured range.
+     */
+    public static final int BLOCK_SLOT_DURATION_MINUTES = 30;
+
+    /**
      * Derive slot duration from the window duration and capacity model.
      * numberOfSlots = capacity / parallelism (integer division)
      * slotDuration  = windowMinutes / numberOfSlots (integer division, min 1)
+     *
+     * BLOCK windows have no meaningful capacity, so they use a fixed 30-min
+     * step to align with the planning grid.
      */
     public int computeSlotDurationMinutes() {
+        if (kind == TimeWindowKind.BLOCK) {
+            return BLOCK_SLOT_DURATION_MINUTES;
+        }
         int windowMinutes = (endHour - startHour) * 60;
         int numberOfSlots = capacity / calendar.parallelism;
         if (numberOfSlots <= 0) numberOfSlots = 1;

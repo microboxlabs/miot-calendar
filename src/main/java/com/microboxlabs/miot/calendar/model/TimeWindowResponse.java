@@ -48,6 +48,9 @@ public record TimeWindowResponse(
     @Schema(description = "UI color token for displaying this time window (e.g., \"emerald\", \"amber\")", examples = {"emerald"})
     String color,
 
+    @Schema(required = true, description = "Discriminator: WINDOW (bookable) or BLOCK (non-bookable)")
+    TimeWindowKind kind,
+
     @Schema(required = true, description = "Timestamp when the time window was created", format = "date-time")
     ZonedDateTime createdAt,
 
@@ -71,6 +74,7 @@ public record TimeWindowResponse(
             timeWindow.validTo,
             timeWindow.active,
             timeWindow.color,
+            timeWindow.kind,
             timeWindow.createdAt,
             timeWindow.updatedAt
         );

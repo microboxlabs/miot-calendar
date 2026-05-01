@@ -34,10 +34,16 @@ public record TimeWindowRequest(
     Boolean active,
 
     @Schema(description = "UI color token for displaying this time window (e.g., \"emerald\", \"amber\")", examples = {"emerald"}, maxLength = 32)
-    String color
+    String color,
+
+    @Schema(description = "Discriminator: WINDOW (bookable, default) or BLOCK (non-bookable)", defaultValue = "WINDOW")
+    TimeWindowKind kind
 ) {
     /**
-     * Validate the time window request
+     * Validate the time window request.
+     *
+     * BLOCK windows accept null/0 capacity since they generate non-bookable
+     * slots; WINDOW windows still require capacity >= 1.
      */
     public void validate() {
         if (name == null || name.isBlank()) {
@@ -55,8 +61,16 @@ public record TimeWindowRequest(
         if (validTo != null && validTo.isBefore(validFrom)) {
             throw new IllegalArgumentException("Valid to date must be after valid from date");
         }
-        if (capacity != null && capacity < 1) {
-            throw new IllegalArgumentException("Capacity must be at least 1");
+        validateCapacity();
+    }
+
+    private void validateCapacity() {
+        if (capacity == null) {
+            return;
+        }
+        int min = kind == TimeWindowKind.BLOCK ? 0 : 1;
+        if (capacity < min) {
+            throw new IllegalArgumentException("Capacity must be at least " + min);
         }
     }
 }
