@@ -235,14 +235,14 @@ class ParallelismCapacityTest {
     }
 
     /**
-     * Verify floor behavior: parallelism=3, capacity=10, 4-hour window.
-     * numberOfSlots = 10 / 3 = 3 (integer division)
-     * slotDuration  = 240 / 3 = 80min
-     * slot.capacity = 3
-     * actualTotal   = 3 * 3 = 9 (≤ requested 10)
+     * Verify remainder behavior: parallelism=3, capacity=10, 4-hour window.
+     * numberOfSlots = ceil(10 / 3) = 4
+     * slotDuration  = 240 / 4 = 60min
+     * slot.capacity = 3, 3, 3, 1
+     * actualTotal   = 10
      */
     @Test
-    void testFloorBehaviorWithUnevenDivision() {
+    void testRemainderCapacityWithUnevenDivision() {
         String calendarId = createCalendar("par-floor-div", 3);
         createTimeWindow(calendarId, 8, 12, 10);
 
@@ -254,8 +254,8 @@ class ParallelismCapacityTest {
             .get(SLOTS_PATH)
             .then()
             .statusCode(200)
-            .body("data.size()", equalTo(3))
-            .body("data.every { it.capacity == 3 }", equalTo(true));
+            .body("data.size()", equalTo(4))
+            .body("data.capacity", contains(3, 3, 3, 1));
     }
 
     /**
