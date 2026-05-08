@@ -89,11 +89,15 @@ public class SlotGeneratorService {
                                         LocalDate date, int[] counts) {
         int hour = timeWindow.startHour;
         int minutes = 0;
+        int slotIndex = 0;
+        int maxSlots = timeWindow.kind == TimeWindowKind.BLOCK
+                ? Integer.MAX_VALUE
+                : timeWindow.computeNumberOfSlots();
 
-        while (hour < timeWindow.endHour) {
+        while (hour < timeWindow.endHour && slotIndex < maxSlots) {
             Slot existing = Slot.findByCalendarAndDateTime(calendar.id, date, hour, minutes);
             if (existing == null) {
-                createSlot(calendar, timeWindow, date, hour, minutes);
+                createSlot(calendar, timeWindow, date, hour, minutes, slotIndex);
                 counts[0]++;
             } else if (timeWindow.kind == TimeWindowKind.BLOCK
                     && existing.status == SlotStatus.OPEN
@@ -112,11 +116,12 @@ public class SlotGeneratorService {
                 hour += minutes / 60;
                 minutes = minutes % 60;
             }
+            slotIndex++;
         }
     }
 
     private void createSlot(Calendar calendar, TimeWindow timeWindow,
-                            LocalDate date, int hour, int minutes) {
+                            LocalDate date, int hour, int minutes, int slotIndex) {
         Slot slot = new Slot();
         slot.calendar = calendar;
         slot.timeWindow = timeWindow;
@@ -128,7 +133,7 @@ public class SlotGeneratorService {
             slot.currentOccupancy = 0;
             slot.status = SlotStatus.CLOSED;
         } else {
-            slot.capacity = calendar.parallelism;
+            slot.capacity = timeWindow.computeSlotCapacity(slotIndex);
             slot.currentOccupancy = 0;
             slot.status = SlotStatus.OPEN;
         }

@@ -521,9 +521,8 @@ class ParallelismEdgeCaseTest {
         LocalDate futureWeekday = LocalDate.now().plusDays(45)
                 .with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
 
-        // Newly generated slots should have capacity=3
-        // (parallelism=3, capacity=2 → numberOfSlots=2/3=0→1, slotDuration=120min, capacity=3)
-        // Actually: capacity=2/parallelism=3 → numberOfSlots=0→1 slot, duration=120min, capacity=3
+        // Newly generated slots should preserve the window capacity.
+        // parallelism=3, capacity=2 → one slot, duration=120min, capacity=2
         List<Object> slots = getSlots(calendarId, futureWeekday);
         Assertions.assertFalse(slots.isEmpty(),
                 "Expected slots on a future weekday within extended range");
@@ -536,7 +535,8 @@ class ParallelismEdgeCaseTest {
             .get(SLOTS_PATH)
             .then()
             .statusCode(200)
-            .body("data.every { it.capacity == 3 }", equalTo(true));
+            .body("data.size()", equalTo(1))
+            .body("data[0].capacity", equalTo(2));
     }
 
     // ── Group 5: Concurrency ─────────────────────────────────────────────────

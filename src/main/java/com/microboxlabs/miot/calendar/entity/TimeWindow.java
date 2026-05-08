@@ -89,7 +89,7 @@ public class TimeWindow extends PanacheEntityBase {
 
     /**
      * Derive slot duration from the window duration and capacity model.
-     * numberOfSlots = capacity / parallelism (integer division)
+     * numberOfSlots = ceil(capacity / parallelism)
      * slotDuration  = windowMinutes / numberOfSlots (integer division, min 1)
      *
      * BLOCK windows have no meaningful capacity, so they use a fixed 30-min
@@ -100,10 +100,36 @@ public class TimeWindow extends PanacheEntityBase {
             return BLOCK_SLOT_DURATION_MINUTES;
         }
         int windowMinutes = (endHour - startHour) * 60;
-        int numberOfSlots = capacity / calendar.parallelism;
-        if (numberOfSlots <= 0) numberOfSlots = 1;
+        int numberOfSlots = computeNumberOfSlots();
         int duration = windowMinutes / numberOfSlots;
         return Math.max(duration, 1);
+    }
+
+    /**
+     * Number of bookable slots needed to represent the full window capacity.
+     */
+    public int computeNumberOfSlots() {
+        if (kind == TimeWindowKind.BLOCK) {
+            return 0;
+        }
+        int parallelism = Math.max(calendar.parallelism, 1);
+        return Math.max((capacity + parallelism - 1) / parallelism, 1);
+    }
+
+    /**
+     * Capacity for a generated slot at the given zero-based position.
+     * Full slots use calendar parallelism; the final slot may carry the remainder.
+     */
+    public int computeSlotCapacity(int slotIndex) {
+        if (kind == TimeWindowKind.BLOCK) {
+            return 0;
+        }
+        int parallelism = Math.max(calendar.parallelism, 1);
+        int remaining = capacity - (slotIndex * parallelism);
+        if (remaining <= 0) {
+            return 0;
+        }
+        return Math.min(parallelism, remaining);
     }
 
     // Finder methods

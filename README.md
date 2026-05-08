@@ -225,12 +225,12 @@ curl -X POST http://localhost:8083/api/v1/miot-calendar/calendars/{calendarId}/t
 ```
 
 The `capacity` is the total number of services this window can handle. Slot duration is derived automatically:
-- `numberOfSlots = max(1, floor(capacity / parallelism))` — clamped to 1 when capacity < parallelism
+- `numberOfSlots = max(1, ceil(capacity / parallelism))`
 - `slotDuration = windowMinutes / numberOfSlots`
-- `slot.capacity = parallelism`
+- `slot.capacity = min(parallelism, remaining window capacity)` — the final slot may carry the remainder
 
 Example: 8-hour window (480 min), capacity=20, parallelism=5 → 4 slots of 120 min, each with capacity=5.
-If capacity < parallelism (e.g., capacity=2, parallelism=5), a single slot spans the entire window with capacity=5.
+If capacity < parallelism (e.g., capacity=2, parallelism=5), a single slot spans the entire window with capacity=2.
 
 Days of week use ISO numeric codes: 1=Monday through 7=Sunday.
 
