@@ -93,6 +93,7 @@ class ParallelismEdgeCaseTest {
             .body(String.format("""
                 {
                     "name": "Test Window",
+                    "slotGenerationMode": "AUTO",
                     "startHour": %d,
                     "endHour": %d,
                     "capacity": %d,
@@ -113,6 +114,7 @@ class ParallelismEdgeCaseTest {
             .body(String.format("""
                 {
                     "name": "Test Window",
+                    "slotGenerationMode": "AUTO",
                     "startHour": %d,
                     "endHour": %d,
                     "capacity": %d,
