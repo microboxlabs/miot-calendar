@@ -4,6 +4,7 @@ import com.microboxlabs.miot.calendar.entity.Booking;
 import com.microboxlabs.miot.calendar.entity.Calendar;
 import com.microboxlabs.miot.calendar.entity.Slot;
 import com.microboxlabs.miot.calendar.model.BookingRequest;
+import com.microboxlabs.miot.calendar.model.ResourceData;
 import com.microboxlabs.miot.calendar.validation.BookingValidationService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -104,6 +105,38 @@ public class BookingService {
 
         LOG.infof("Created booking %s for resource %s in slot %s",
             booking.id, booking.resourceId, slot.id);
+
+        return booking;
+    }
+
+    /**
+     * Update an existing booking's resource payload in place.
+     *
+     * <p>Only {@code resourceType}, {@code resourceLabel} and {@code resourceData}
+     * change — the slot stays the same. The request's resource id must match the
+     * booking's current resource id; a booking cannot be repointed to a different
+     * resource (use cancel + create for that).
+     */
+    @Transactional
+    public Booking updateBookingResource(UUID bookingId, ResourceData resource) {
+        Booking booking = Booking.findById(bookingId);
+        if (booking == null) {
+            throw new IllegalArgumentException("Booking not found: " + bookingId);
+        }
+
+        resource.validate();
+        if (!resource.id().equals(booking.resourceId)) {
+            throw new IllegalArgumentException(String.format(
+                "Resource id mismatch: booking %s is for resource %s, cannot update to %s",
+                bookingId, booking.resourceId, resource.id()));
+        }
+
+        booking.resourceType = resource.type();
+        booking.resourceLabel = resource.label();
+        booking.resourceData = resource.data();
+        booking.persist();
+
+        LOG.infof("Updated booking %s resource data for resource %s", booking.id, booking.resourceId);
 
         return booking;
     }
