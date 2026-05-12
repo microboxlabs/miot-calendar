@@ -101,6 +101,39 @@ public class BookingResource {
         }
     }
 
+    @PUT
+    @Path("/{id}")
+    @Transactional
+    @Operation(operationId = "updateBooking", summary = "Update booking resource data", description = "Update an existing booking's resource payload in place. The slot is not changed; move a booking by cancelling and recreating it.")
+    @APIResponse(responseCode = "200", description = "Booking updated",
+        content = @Content(schema = @Schema(implementation = BookingResponse.class)))
+    @APIResponse(responseCode = "400", description = "Invalid request (e.g. missing resource or resource id mismatch)",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "404", description = "Booking not found",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public Response updateBooking(
+            @Parameter(description = "Unique identifier of the booking to update", required = true) @PathParam("id") UUID id,
+            BookingUpdateRequest request) {
+        try {
+            if (request == null) {
+                throw new IllegalArgumentException("Request body is required");
+            }
+            request.validate();
+            Booking booking = bookingService.updateBookingResource(id, request.resource());
+            return Response.ok(BookingResponse.from(booking)).build();
+        } catch (IllegalArgumentException e) {
+            if (e.getMessage() != null && e.getMessage().startsWith("Booking not found")) {
+                return Response.status(Response.Status.NOT_FOUND)
+                    .entity(ErrorResponse.notFound(e.getMessage()))
+                    .build();
+            }
+            LOG.warnf("Invalid booking update request: %s", e.getMessage());
+            return Response.status(Response.Status.BAD_REQUEST)
+                .entity(ErrorResponse.badRequest(e.getMessage()))
+                .build();
+        }
+    }
+
     @DELETE
     @Path("/{id}")
     @Transactional

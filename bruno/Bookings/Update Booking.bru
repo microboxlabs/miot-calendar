@@ -1,0 +1,30 @@
+meta {
+  name: Update Booking
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/v1/miot-calendar/bookings/{{bookingId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "resource": {
+      "id": "truck-4521",
+      "type": "truck",
+      "label": "Truck AB-1234 (assigned)",
+      "data": {
+        "driver": "Juan Pérez",
+        "plate": "AB-1234",
+        "assignedCarrier": "carrier-uuid"
+      }
+    }
+  }
+}

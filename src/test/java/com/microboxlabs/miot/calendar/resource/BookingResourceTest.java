@@ -263,6 +263,76 @@ class BookingResourceTest {
     }
 
     @Test
+    @Order(7)
+    void testUpdateBookingResourceData() {
+        // Update the booking's resource payload in place (slot unchanged).
+        given()
+            .contentType(ContentType.JSON)
+            .body(String.format("""
+                {
+                    "resource": {
+                        "id": "%s",
+                        "type": "SERVICE",
+                        "label": "Acme Corp - assigned",
+                        "data": {
+                            "cliente": "Acme Corp",
+                            "assignedCarrier": "carrier-uuid",
+                            "assignedDriver": "driver-uuid",
+                            "assignedTruck": "truck-uuid"
+                        }
+                    }
+                }
+                """, RESOURCE_ID))
+            .when()
+            .put(bookingsUrl + "/" + bookingId)
+            .then()
+            .statusCode(200)
+            .body("id", equalTo(bookingId))
+            .body("resource.id", equalTo(RESOURCE_ID))
+            .body("resource.label", equalTo("Acme Corp - assigned"))
+            .body("resource.data.assignedCarrier", equalTo("carrier-uuid"));
+
+        // GET reflects the new data.
+        given()
+            .when()
+            .get(bookingsUrl + "/" + bookingId)
+            .then()
+            .statusCode(200)
+            .body("resource.data.assignedTruck", equalTo("truck-uuid"));
+
+        // A PUT that tries to repoint the booking to a different resource is rejected.
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "resource": {
+                        "id": "SRV-OTHER",
+                        "type": "SERVICE"
+                    }
+                }
+                """)
+            .when()
+            .put(bookingsUrl + "/" + bookingId)
+            .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void testUpdateBookingNotFound() {
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "resource": { "id": "SRV-001" }
+                }
+                """)
+            .when()
+            .put(bookingsUrl + "/00000000-0000-0000-0000-000000000000")
+            .then()
+            .statusCode(404);
+    }
+
+    @Test
     @Order(8)
     void testCancelBooking() {
         given()
