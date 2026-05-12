@@ -1,5 +1,6 @@
 package com.microboxlabs.miot.calendar.entity;
 
+import com.microboxlabs.miot.calendar.model.SlotGenerationMode;
 import com.microboxlabs.miot.calendar.model.TimeWindowKind;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
@@ -61,6 +62,10 @@ public class TimeWindow extends PanacheEntityBase {
     @Enumerated(EnumType.STRING)
     @Column(name = "kind", nullable = false, length = 16)
     public TimeWindowKind kind = TimeWindowKind.WINDOW;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "slot_generation_mode", nullable = false, length = 8)
+    public SlotGenerationMode slotGenerationMode = SlotGenerationMode.MANUAL;
 
     @Column(name = "created_at", nullable = false)
     public ZonedDateTime createdAt;
@@ -130,6 +135,56 @@ public class TimeWindow extends PanacheEntityBase {
             return 0;
         }
         return Math.min(parallelism, remaining);
+    }
+
+    /**
+     * Effective slot step in minutes used when generating slots: the persisted
+     * {@code slotDurationMinutes}. AUTO windows have this kept in sync with
+     * {@link #computeSlotDurationMinutes()} on save; MANUAL windows use the admin's value.
+     */
+    public int effectiveSlotDurationMinutes() {
+        if (kind == TimeWindowKind.BLOCK) {
+            return BLOCK_SLOT_DURATION_MINUTES;
+        }
+        return (slotDurationMinutes != null && slotDurationMinutes > 0)
+                ? slotDurationMinutes
+                : Math.max(computeSlotDurationMinutes(), 1);
+    }
+
+    /**
+     * Total number of slots generated across the window.
+     * <ul>
+     *   <li>BLOCK — 0 (the generator fills the whole range with CLOSED cells independently).</li>
+     *   <li>WINDOW + AUTO — {@link #computeNumberOfSlots()} (every slot bookable).</li>
+     *   <li>WINDOW + MANUAL — {@code floor(windowMinutes / slotDurationMinutes)}; the leftover tail
+     *       (if the duration doesn't divide the window evenly) is unused.</li>
+     * </ul>
+     */
+    public int totalSlots() {
+        if (kind == TimeWindowKind.BLOCK) {
+            return 0;
+        }
+        if (slotGenerationMode == SlotGenerationMode.MANUAL) {
+            int windowMinutes = (endHour - startHour) * 60;
+            return Math.max(windowMinutes / effectiveSlotDurationMinutes(), 0);
+        }
+        return computeNumberOfSlots();
+    }
+
+    /**
+     * Number of leading slots that are bookable (status OPEN). The rest, up to {@link #totalSlots()},
+     * are generated as {@link com.microboxlabs.miot.calendar.model.SlotStatus#OVERFLOW}.
+     * For AUTO this equals {@link #totalSlots()}; for MANUAL it is the capacity model's slot count
+     * ({@code ceil(capacity / parallelism)}) capped at the number of slots that fit.
+     */
+    public int bookableSlots() {
+        if (kind == TimeWindowKind.BLOCK) {
+            return 0;
+        }
+        if (slotGenerationMode == SlotGenerationMode.MANUAL) {
+            return Math.min(computeNumberOfSlots(), totalSlots());
+        }
+        return computeNumberOfSlots();
     }
 
     // Finder methods
