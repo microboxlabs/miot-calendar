@@ -37,13 +37,27 @@ public record TimeWindowRequest(
     String color,
 
     @Schema(description = "Discriminator: WINDOW (bookable, default) or BLOCK (non-bookable)", defaultValue = "WINDOW")
-    TimeWindowKind kind
+    TimeWindowKind kind,
+
+    @Schema(description = "Slot generation mode: AUTO derives slot duration from capacity/parallelism; "
+            + "MANUAL uses slotDurationMinutes. Ignored for BLOCK windows.", defaultValue = "MANUAL")
+    SlotGenerationMode slotGenerationMode,
+
+    @Schema(description = "Slot length in minutes. Required only when slotGenerationMode = MANUAL on a "
+            + "WINDOW; if omitted there it is seeded from the capacity model. Ignored for AUTO and BLOCK. "
+            + "Must be between 5 and the window length in minutes.", minimum = "5", examples = {"10"})
+    Integer slotDurationMinutes
 ) {
+    /** Minimum admin-settable slot duration, in minutes. */
+    public static final int MIN_MANUAL_SLOT_DURATION_MINUTES = 5;
+
     /**
-     * Validate the time window request.
+     * Validate the time window request (create path).
      *
-     * BLOCK windows accept null/0 capacity since they generate non-bookable
-     * slots; WINDOW windows still require capacity >= 1.
+     * BLOCK windows accept null/0 capacity since they generate non-bookable slots; WINDOW windows
+     * still require capacity >= 1. A MANUAL WINDOW with an explicit slotDurationMinutes must keep it
+     * within [{@value #MIN_MANUAL_SLOT_DURATION_MINUTES}, window-length-minutes]; a null value is
+     * allowed (the service seeds it from the capacity model).
      */
     public void validate() {
         if (name == null || name.isBlank()) {
@@ -62,6 +76,7 @@ public record TimeWindowRequest(
             throw new IllegalArgumentException("Valid to date must be after valid from date");
         }
         validateCapacity();
+        validateManualSlotDuration();
     }
 
     private void validateCapacity() {
@@ -71,6 +86,24 @@ public record TimeWindowRequest(
         int min = kind == TimeWindowKind.BLOCK ? 0 : 1;
         if (capacity < min) {
             throw new IllegalArgumentException("Capacity must be at least " + min);
+        }
+    }
+
+    /** True when this request describes a MANUAL bookable window (BLOCK and AUTO ignore the duration). */
+    public boolean isManualWindow() {
+        return kind != TimeWindowKind.BLOCK
+            && (slotGenerationMode == null || slotGenerationMode == SlotGenerationMode.MANUAL);
+    }
+
+    private void validateManualSlotDuration() {
+        if (!isManualWindow() || slotDurationMinutes == null) {
+            return;
+        }
+        int windowMinutes = (endHour - startHour) * 60;
+        if (slotDurationMinutes < MIN_MANUAL_SLOT_DURATION_MINUTES || slotDurationMinutes > windowMinutes) {
+            throw new IllegalArgumentException(
+                "Slot duration must be between " + MIN_MANUAL_SLOT_DURATION_MINUTES
+                    + " and " + windowMinutes + " minutes (the window length)");
         }
     }
 }

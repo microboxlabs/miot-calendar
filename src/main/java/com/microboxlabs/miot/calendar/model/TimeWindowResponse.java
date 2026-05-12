@@ -27,7 +27,7 @@ public record TimeWindowResponse(
     @Schema(required = true, description = "End hour of the time window (exclusive)", minimum = "0", maximum = "23", examples = {"12"})
     Integer endHour,
 
-    @Schema(required = true, description = "Duration of each slot in minutes (derived from capacity model)", minimum = "1", examples = {"60"})
+    @Schema(required = true, description = "Duration of each slot in minutes (admin-set when slotGenerationMode = MANUAL, derived from the capacity model otherwise)", minimum = "1", examples = {"10"})
     Integer slotDurationMinutes,
 
     @Schema(required = true, description = "Total number of services this window can handle across all slots", minimum = "1", examples = {"20"})
@@ -50,6 +50,15 @@ public record TimeWindowResponse(
 
     @Schema(required = true, description = "Discriminator: WINDOW (bookable) or BLOCK (non-bookable)")
     TimeWindowKind kind,
+
+    @Schema(required = true, description = "Slot generation mode: AUTO (slot duration derived from capacity/parallelism) or MANUAL (admin-set slot duration)")
+    SlotGenerationMode slotGenerationMode,
+
+    @Schema(required = true, description = "Total number of slots generated across the window (floor(windowMinutes / slotDurationMinutes) in MANUAL mode; for BLOCK windows this is 0)", minimum = "0", examples = {"24"})
+    Integer totalSlots,
+
+    @Schema(required = true, description = "How many of the generated slots are bookable (OPEN); the remainder, up to totalSlots, are OVERFLOW", minimum = "0", examples = {"20"})
+    Integer bookableSlots,
 
     @Schema(required = true, description = "Timestamp when the time window was created", format = "date-time")
     ZonedDateTime createdAt,
@@ -75,6 +84,9 @@ public record TimeWindowResponse(
             timeWindow.active,
             timeWindow.color,
             timeWindow.kind,
+            timeWindow.slotGenerationMode,
+            timeWindow.totalSlots(),
+            timeWindow.bookableSlots(),
             timeWindow.createdAt,
             timeWindow.updatedAt
         );
