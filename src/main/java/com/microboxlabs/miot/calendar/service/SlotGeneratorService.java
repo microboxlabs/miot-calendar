@@ -4,6 +4,7 @@ import com.microboxlabs.miot.calendar.entity.Calendar;
 import com.microboxlabs.miot.calendar.entity.Slot;
 import com.microboxlabs.miot.calendar.entity.TimeWindow;
 import com.microboxlabs.miot.calendar.model.GenerateSlotsResponse;
+import com.microboxlabs.miot.calendar.model.SlotGenerationMode;
 import com.microboxlabs.miot.calendar.model.SlotStatus;
 import com.microboxlabs.miot.calendar.model.TimeWindowKind;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -92,21 +93,20 @@ public class SlotGeneratorService {
         int minutes = 0;
         int slotIndex = 0;
         int step = timeWindow.effectiveSlotDurationMinutes();
-        // BLOCK fills the whole range with CLOSED cells; WINDOW emits totalSlots() slots, of which
-        // the first bookableSlots() are OPEN and the rest are OVERFLOW (MANUAL mode only — for AUTO
-        // bookableSlots() == totalSlots() so no OVERFLOW slots are produced).
+        // BLOCK fills the whole range with CLOSED cells; WINDOW emits totalSlots() slots, all OPEN.
+        // For MANUAL the grid can have more slots than the window's booking capacity — that cap is
+        // enforced at booking time (across all slots, in any order), not by withholding slots.
         int maxSlots = isBlock ? Integer.MAX_VALUE : timeWindow.totalSlots();
-        int bookable = isBlock ? 0 : timeWindow.bookableSlots();
 
         while (hour < timeWindow.endHour && slotIndex < maxSlots) {
             Slot existing = Slot.findByCalendarAndDateTime(calendar.id, date, hour, minutes);
             if (existing == null) {
-                createSlot(calendar, timeWindow, date, hour, minutes, slotIndex, bookable);
+                createSlot(calendar, timeWindow, date, hour, minutes, slotIndex);
                 counts[0]++;
             } else if (isBlock
-                    && (existing.status == SlotStatus.OPEN || existing.status == SlotStatus.OVERFLOW)
+                    && existing.status == SlotStatus.OPEN
                     && existing.currentOccupancy == 0) {
-                // BLOCK overrides an unbooked OPEN/OVERFLOW slot left by a colliding window.
+                // BLOCK overrides an unbooked OPEN slot left by a colliding window.
                 existing.status = SlotStatus.CLOSED;
                 existing.timeWindow = timeWindow;
                 existing.capacity = 0;
@@ -125,7 +125,7 @@ public class SlotGeneratorService {
     }
 
     private void createSlot(Calendar calendar, TimeWindow timeWindow,
-                            LocalDate date, int hour, int minutes, int slotIndex, int bookableSlots) {
+                            LocalDate date, int hour, int minutes, int slotIndex) {
         Slot slot = new Slot();
         slot.calendar = calendar;
         slot.timeWindow = timeWindow;
@@ -136,13 +136,14 @@ public class SlotGeneratorService {
         if (timeWindow.kind == TimeWindowKind.BLOCK) {
             slot.capacity = 0;
             slot.status = SlotStatus.CLOSED;
-        } else if (slotIndex < bookableSlots) {
-            slot.capacity = timeWindow.computeSlotCapacity(slotIndex);
-            slot.status = SlotStatus.OPEN;
         } else {
-            // Generated beyond the window's bookable quota (MANUAL mode): rendered but not bookable.
-            slot.capacity = 0;
-            slot.status = SlotStatus.OVERFLOW;
+            // Every generated slot is bookable: AUTO front-loads per-slot capacity per the
+            // parallelism model; MANUAL gives each slot the full parallelism, with the window's
+            // total capacity capped at booking time (in any slot, in any order).
+            slot.capacity = timeWindow.slotGenerationMode == SlotGenerationMode.AUTO
+                    ? timeWindow.computeSlotCapacity(slotIndex)
+                    : timeWindow.manualSlotCapacity();
+            slot.status = SlotStatus.OPEN;
         }
         slot.persist();
     }

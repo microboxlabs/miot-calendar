@@ -134,6 +134,14 @@ public class Booking extends PanacheEntityBase {
     }
 
     /**
+     * Count bookings made in a given time window on a given date — used to enforce a MANUAL
+     * window's total-capacity cap (the cap applies across all of the window's slots for the day).
+     */
+    public static long countByWindowAndDate(UUID timeWindowId, LocalDate date) {
+        return count("slot.timeWindow.id = ?1 and slotDate = ?2", timeWindowId, date);
+    }
+
+    /**
      * Find bookings by resource type
      */
     public static List<Booking> findByResourceType(String resourceType) {

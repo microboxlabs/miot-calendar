@@ -23,9 +23,10 @@ public enum SlotStatus {
     CLOSED,
 
     /**
-     * Slot was generated beyond the time window's bookable quota (MANUAL slot generation):
-     * it exists so the planning grid can render it, but it carries zero capacity and bookings
-     * against it are rejected.
+     * Legacy status: previously assigned to MANUAL-mode slots generated beyond the window's
+     * bookable quota. No longer produced — MANUAL windows now emit every slot as {@code OPEN} and
+     * enforce the window's total capacity at booking time. Kept so existing rows (and the booking
+     * validator's defensive guard) still resolve; new code should not depend on it.
      */
     OVERFLOW
 }

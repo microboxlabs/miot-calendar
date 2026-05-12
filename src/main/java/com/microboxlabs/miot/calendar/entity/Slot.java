@@ -88,10 +88,20 @@ public class Slot extends PanacheEntityBase {
     }
 
     /**
-     * Find available slots (OPEN and not full)
+     * Find available slots (OPEN, not individually full, and — for slots that belong to a time
+     * window — whose window has not yet reached its total-capacity cap for that date). The window
+     * cap matters for MANUAL windows, where the slot grid is intentionally larger than the
+     * window's booking capacity; for AUTO windows the per-slot capacities already sum to the
+     * window capacity, so the extra predicate is a no-op there.
      */
     public static List<Slot> findAvailableByCalendarAndDateRange(UUID calendarId, LocalDate startDate, LocalDate endDate) {
-        return list("calendar.id = ?1 and slotDate >= ?2 and slotDate <= ?3 and status = ?4 and currentOccupancy < capacity order by slotDate, slotHour, slotMinutes",
+        return list("select s from Slot s left join s.timeWindow tw "
+                + "where s.calendar.id = ?1 and s.slotDate >= ?2 and s.slotDate <= ?3 "
+                + "and s.status = ?4 and s.currentOccupancy < s.capacity "
+                + "and (tw is null or "
+                + "  (select coalesce(sum(s2.currentOccupancy), 0) from Slot s2 "
+                + "   where s2.timeWindow = tw and s2.slotDate = s.slotDate) < tw.capacity) "
+                + "order by s.slotDate, s.slotHour, s.slotMinutes",
                 calendarId, startDate, endDate, SlotStatus.OPEN);
     }
 

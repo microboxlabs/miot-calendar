@@ -57,7 +57,7 @@ public record TimeWindowResponse(
     @Schema(required = true, description = "Total number of slots generated across the window (floor(windowMinutes / slotDurationMinutes) in MANUAL mode; for BLOCK windows this is 0)", minimum = "0", examples = {"24"})
     Integer totalSlots,
 
-    @Schema(required = true, description = "How many of the generated slots are bookable (OPEN); the remainder, up to totalSlots, are OVERFLOW", minimum = "0", examples = {"20"})
+    @Schema(required = true, description = "Number of slots that can hold bookings (every generated slot is OPEN, so this equals totalSlots; 0 for BLOCK windows). The window's 'capacity' is a separate cap on the total bookings across all of its slots for a date.", minimum = "0", examples = {"24"})
     Integer bookableSlots,
 
     @Schema(required = true, description = "Timestamp when the time window was created", format = "date-time")

@@ -172,19 +172,22 @@ public class TimeWindow extends PanacheEntityBase {
     }
 
     /**
-     * Number of leading slots that are bookable (status OPEN). The rest, up to {@link #totalSlots()},
-     * are generated as {@link com.microboxlabs.miot.calendar.model.SlotStatus#OVERFLOW}.
-     * For AUTO this equals {@link #totalSlots()}; for MANUAL it is the capacity model's slot count
-     * ({@code ceil(capacity / parallelism)}) capped at the number of slots that fit.
+     * Number of slots that can hold bookings. Every generated slot is {@code OPEN}, so this is
+     * simply {@link #totalSlots()}. The window's total {@code capacity} is a separate cap on the
+     * day's bookings across all of its slots, enforced when a booking is created (see
+     * {@code BookingValidationService}) — not by withholding slots.
      */
     public int bookableSlots() {
-        if (kind == TimeWindowKind.BLOCK) {
-            return 0;
-        }
-        if (slotGenerationMode == SlotGenerationMode.MANUAL) {
-            return Math.min(computeNumberOfSlots(), totalSlots());
-        }
-        return computeNumberOfSlots();
+        return totalSlots();
+    }
+
+    /**
+     * Per-slot capacity for MANUAL windows: every generated slot holds up to {@code parallelism}
+     * bookings. The window-level {@code capacity} cap is enforced separately, across all of the
+     * window's slots for the day, when a booking is created (in any slot, in any order).
+     */
+    public int manualSlotCapacity() {
+        return Math.max(calendar.parallelism, 1);
     }
 
     // Finder methods

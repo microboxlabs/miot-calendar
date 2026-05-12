@@ -16,10 +16,11 @@ public enum SlotGenerationMode {
 
     /**
      * Slot duration is set explicitly by the admin ({@code slotDurationMinutes}). The window is
-     * filled with {@code floor(windowMinutes / slotDurationMinutes)} slots; only the first
-     * {@code ceil(capacity / parallelism)} are bookable ({@code OPEN}) — the remainder are generated
-     * as {@link SlotStatus#OVERFLOW} so the planning grid can render them, but bookings against
-     * those slots are rejected.
+     * filled with {@code floor(windowMinutes / slotDurationMinutes)} slots, all bookable
+     * ({@code OPEN}), each holding up to {@code parallelism} bookings. The window's {@code capacity}
+     * is a cap on the <em>total</em> bookings across all of its slots for the date: once that count
+     * is reached, no slot in the window accepts another booking, regardless of order. The slot grid
+     * may therefore be larger than {@code capacity} — the surplus simply stays empty.
      */
     MANUAL
 }
