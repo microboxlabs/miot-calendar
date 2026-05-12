@@ -6,6 +6,7 @@ import com.microboxlabs.miot.calendar.entity.TimeWindow;
 import com.microboxlabs.miot.calendar.model.SlotGenerationMode;
 import com.microboxlabs.miot.calendar.model.SlotStatus;
 import com.microboxlabs.miot.calendar.model.TimeWindowKind;
+import io.quarkus.hibernate.orm.panache.Panache;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -164,5 +165,54 @@ class SlotGeneratorServiceTest {
         slots.stream()
                 .filter(s -> s.slotHour >= 10)
                 .forEach(s -> assertEquals(SlotStatus.CLOSED, s.status, "slot at " + s.slotHour + ":" + s.slotMinutes));
+    }
+
+    @Test
+    @TestTransaction
+    void bookedSlotSurvivesReprocessAfterCapacityDrop() {
+        // 4h window, 30-min slots → 8 slots; capacity 8, parallelism 1 → all 8 OPEN.
+        Calendar cal = persistCalendar("gsvc-reproc", 1);
+        TimeWindow tw = persistWindow(cal, TimeWindowKind.WINDOW, SlotGenerationMode.MANUAL, 8, 12, 30, 8);
+        slotGeneratorService.generateSlots(cal.id, A_MONDAY, A_MONDAY);
+
+        // Simulate a booking on the 08:00 slot, then drop the window capacity (bookable → ceil(2/1) = 2).
+        Slot first = Slot.findByCalendarAndDateTime(cal.id, A_MONDAY, 8, 0);
+        first.currentOccupancy = 1;
+        tw.capacity = 2;
+        Panache.getEntityManager().flush();
+        Panache.getEntityManager().clear();
+
+        slotGeneratorService.generateSlots(cal.id, A_MONDAY, A_MONDAY, true); // reprocess: drop unbooked, regenerate
+
+        List<Slot> slots = Slot.findByCalendarAndDateRange(cal.id, A_MONDAY, A_MONDAY);
+        assertEquals(8, slots.size(), "8 slots still fit the window regardless of the lowered bookable count");
+        Slot surviving = slots.stream()
+                .filter(s -> s.slotHour == 8 && s.slotMinutes == 0)
+                .findFirst().orElseThrow();
+        assertEquals(1, surviving.currentOccupancy, "the booked slot is preserved across the reprocess");
+        assertEquals(6, countByStatus(slots, SlotStatus.OVERFLOW), "slots beyond the lowered bookable quota become OVERFLOW");
+    }
+
+    @Test
+    @TestTransaction
+    void manualToAutoReprocessDropsOverflowSlots() {
+        // MANUAL 4h/10-min/cap20/p1 → 24 slots, 4 of them OVERFLOW.
+        Calendar cal = persistCalendar("gsvc-m2a", 1);
+        TimeWindow tw = persistWindow(cal, TimeWindowKind.WINDOW, SlotGenerationMode.MANUAL, 8, 12, 10, 20);
+        slotGeneratorService.generateSlots(cal.id, A_MONDAY, A_MONDAY);
+        assertEquals(4, countByStatus(Slot.findByCalendarAndDateRange(cal.id, A_MONDAY, A_MONDAY), SlotStatus.OVERFLOW));
+
+        // Switch to AUTO (mimic CalendarService: re-derive the duration), then reprocess.
+        tw.slotGenerationMode = SlotGenerationMode.AUTO;
+        tw.slotDurationMinutes = tw.computeSlotDurationMinutes(); // 240 / ceil(20/1) = 12
+        Panache.getEntityManager().flush();
+        Panache.getEntityManager().clear();
+
+        slotGeneratorService.generateSlots(cal.id, A_MONDAY, A_MONDAY, true);
+
+        List<Slot> slots = Slot.findByCalendarAndDateRange(cal.id, A_MONDAY, A_MONDAY);
+        assertEquals(0, countByStatus(slots, SlotStatus.OVERFLOW), "AUTO never produces OVERFLOW slots");
+        assertEquals(20, slots.size());
+        assertTrue(slots.stream().allMatch(s -> s.status == SlotStatus.OPEN));
     }
 }
