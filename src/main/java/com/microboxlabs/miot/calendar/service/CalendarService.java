@@ -6,6 +6,7 @@ import com.microboxlabs.miot.calendar.entity.Slot;
 import com.microboxlabs.miot.calendar.entity.SlotManager;
 import com.microboxlabs.miot.calendar.entity.TimeWindow;
 import com.microboxlabs.miot.calendar.model.CalendarRequest;
+import com.microboxlabs.miot.calendar.model.SlotGenerationMode;
 import com.microboxlabs.miot.calendar.model.SlotManagerTriggerEvent;
 import com.microboxlabs.miot.calendar.model.TimeWindowKind;
 import com.microboxlabs.miot.calendar.model.TimeWindowRequest;
@@ -177,7 +178,12 @@ public class CalendarService {
     private void reprocessSlotsForParallelismChange(UUID calendarId) {
         List<TimeWindow> timeWindows = TimeWindow.findActiveByCalendarId(calendarId);
         for (TimeWindow tw : timeWindows) {
-            tw.slotDurationMinutes = tw.computeSlotDurationMinutes();
+            // Only AUTO windows re-derive their slot length from the new parallelism. MANUAL windows
+            // keep the admin-set duration; their bookable/overflow split still shifts on regen because
+            // bookableSlots() = ceil(capacity / parallelism) changed.
+            if (tw.slotGenerationMode == SlotGenerationMode.AUTO) {
+                tw.slotDurationMinutes = tw.computeSlotDurationMinutes();
+            }
         }
         triggerSlotManagerReprocess(calendarId);
     }
@@ -282,9 +288,13 @@ public class CalendarService {
         timeWindow.startHour = request.startHour();
         timeWindow.endHour = request.endHour();
         timeWindow.kind = request.kind() != null ? request.kind() : TimeWindowKind.WINDOW;
+        timeWindow.slotGenerationMode = resolveSlotGenerationMode(request.slotGenerationMode());
         timeWindow.capacity = resolveCapacity(request.capacity(), timeWindow.kind);
         timeWindow.daysOfWeek = request.daysOfWeek() != null ? request.daysOfWeek() : "1,2,3,4,5";
-        timeWindow.slotDurationMinutes = timeWindow.computeSlotDurationMinutes();
+        // Clear the entity default so applySlotDuration resolves it from the request or the derived
+        // value rather than treating the placeholder 30 as an admin-chosen duration.
+        timeWindow.slotDurationMinutes = null;
+        applySlotDuration(timeWindow, request.slotDurationMinutes());
         timeWindow.validFrom = request.validFrom();
         timeWindow.validTo = request.validTo();
         timeWindow.active = request.active() != null ? request.active() : true;
@@ -307,8 +317,8 @@ public class CalendarService {
         }
 
         boolean needsRecompute = applyTimeWindowFields(timeWindow, request);
-        if (needsRecompute) {
-            timeWindow.slotDurationMinutes = timeWindow.computeSlotDurationMinutes();
+        if (needsRecompute || request.slotDurationMinutes() != null) {
+            applySlotDuration(timeWindow, request.slotDurationMinutes());
         }
 
         LOG.infof("Updated time window: %s", timeWindow.name);
@@ -326,6 +336,44 @@ public class CalendarService {
         return kind == TimeWindowKind.BLOCK ? 0 : 1;
     }
 
+    /** Default slot generation mode for new windows: MANUAL. */
+    private static SlotGenerationMode resolveSlotGenerationMode(SlotGenerationMode requested) {
+        return requested != null ? requested : SlotGenerationMode.MANUAL;
+    }
+
+    /**
+     * Resolve and persist {@code slotDurationMinutes} after a window's other fields are set.
+     * <ul>
+     *   <li>BLOCK or AUTO — derived ({@link TimeWindow#computeSlotDurationMinutes()}); any requested value is ignored.</li>
+     *   <li>MANUAL WINDOW — uses {@code requestedDuration} (validated to
+     *       [{@value TimeWindowRequest#MIN_MANUAL_SLOT_DURATION_MINUTES}, windowMinutes]); if absent, keeps the current
+     *       value when it is still usable ({@code 0 < d <= windowMinutes}), otherwise seeds it from the derived value
+     *       (so a freshly-created window or one whose window shrank below the old duration falls back to AUTO-equivalent).</li>
+     * </ul>
+     * Throws {@link IllegalArgumentException} (mapped to HTTP 400 by the resource layer) on an out-of-range requested value.
+     */
+    private static void applySlotDuration(TimeWindow tw, Integer requestedDuration) {
+        if (tw.kind == TimeWindowKind.BLOCK || tw.slotGenerationMode == SlotGenerationMode.AUTO) {
+            tw.slotDurationMinutes = tw.computeSlotDurationMinutes();
+            return;
+        }
+        int windowMinutes = (tw.endHour - tw.startHour) * 60;
+        if (requestedDuration != null) {
+            int min = TimeWindowRequest.MIN_MANUAL_SLOT_DURATION_MINUTES;
+            if (requestedDuration < min || requestedDuration > windowMinutes) {
+                throw new IllegalArgumentException(
+                    "Slot duration must be between " + min + " and " + windowMinutes + " minutes (the window length)");
+            }
+            tw.slotDurationMinutes = requestedDuration;
+            return;
+        }
+        Integer current = tw.slotDurationMinutes;
+        if (current == null || current <= 0 || current > windowMinutes) {
+            tw.slotDurationMinutes = tw.computeSlotDurationMinutes();
+        }
+        // else: keep the existing admin-set duration unchanged (capacity/parallelism edits don't move it).
+    }
+
     private boolean applyTimeWindowFields(TimeWindow tw, TimeWindowRequest request) {
         boolean needsRecompute = false;
         if (request.name() != null)      tw.name = request.name();
@@ -338,6 +386,7 @@ public class CalendarService {
         if (request.active() != null)     tw.active = request.active();
         if (request.color() != null)      tw.color = request.color();
         if (request.kind() != null)      { tw.kind = request.kind();           needsRecompute = true; }
+        if (request.slotGenerationMode() != null) { tw.slotGenerationMode = request.slotGenerationMode(); needsRecompute = true; }
         return needsRecompute;
     }
 }

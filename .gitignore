@@ -84,3 +84,6 @@ jacoco.exec
 
 # Native image build
 native-image.properties
+
+# Cursor IDE plans (local-only scratchpads; git log is the durable record)
+.cursor/plans/

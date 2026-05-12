@@ -48,6 +48,12 @@ public class BookingValidationService {
                 "SLOT_CLOSED"
             );
         }
+        if (slot.status == SlotStatus.OVERFLOW) {
+            throw new BookingValidationException(
+                "Slot was generated beyond the time window's bookable capacity",
+                "SLOT_OVERFLOW"
+            );
+        }
         if (slot.status == SlotStatus.FULL) {
             throw new BookingValidationException(
                 "Slot is at full capacity",

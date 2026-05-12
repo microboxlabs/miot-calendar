@@ -82,6 +82,7 @@ class ParallelismCapacityTest {
             .body(String.format("""
                 {
                     "name": "Test Window",
+                    "slotGenerationMode": "AUTO",
                     "startHour": %d,
                     "endHour": %d,
                     "capacity": %d,
