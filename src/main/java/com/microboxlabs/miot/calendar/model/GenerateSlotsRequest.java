@@ -17,8 +17,16 @@ public record GenerateSlotsRequest(
     LocalDate startDate,
 
     @Schema(required = true, description = "End date of the generation range (inclusive, max 90 days from start)", format = "date", examples = {"2025-06-30"})
-    LocalDate endDate
+    LocalDate endDate,
+
+    @Schema(description = "If true, delete all unbooked slots in the range and regenerate them with the current time-window config — useful after a config change or to convert legacy OVERFLOW rows produced by an older deploy. Booked slots are preserved. Defaults to false (gaps only).", defaultValue = "false")
+    Boolean reprocess
 ) {
+    /** Absent in the payload ⇒ false. */
+    public boolean reprocessOrDefault() {
+        return Boolean.TRUE.equals(reprocess);
+    }
+
     /**
      * Validate the generate slots request
      */
