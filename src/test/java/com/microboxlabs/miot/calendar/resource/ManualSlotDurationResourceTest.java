@@ -71,14 +71,14 @@ class ManualSlotDurationResourceTest {
     @Test
     void createsManualWindowWithExplicitDurationAndDerivedSlotCounts() {
         String calendarId = createCalendar("msd-explicit", 1);
-        // 4h window, 10-min slots → 24 slots fit; capacity 20, parallelism 1 → 20 OPEN, 4 OVERFLOW.
+        // 4h window, 10-min slots → 24 slots fit; all OPEN. capacity 20 is a separate booking cap.
         given().contentType(ContentType.JSON).body(timeWindowBody("MANUAL", 10, 8, 12, 20))
             .when().post(CALENDARS_PATH + "/" + calendarId + "/time-windows")
             .then().statusCode(201)
             .body("slotGenerationMode", equalTo("MANUAL"))
             .body("slotDurationMinutes", equalTo(10))
             .body("totalSlots", equalTo(24))
-            .body("bookableSlots", equalTo(20));
+            .body("bookableSlots", equalTo(24));
     }
 
     @Test
@@ -133,10 +133,10 @@ class ManualSlotDurationResourceTest {
             .when().put(twPath)
             .then().statusCode(200)
             .body("slotDurationMinutes", equalTo(20))
-            .body("totalSlots", equalTo(12))     // 240 / 20
-            .body("bookableSlots", equalTo(4));  // ceil(4/1), capped at 12
+            .body("totalSlots", equalTo(12))      // 240 / 20
+            .body("bookableSlots", equalTo(12));  // every slot is bookable; capacity 4 caps total bookings
 
-        // MANUAL → AUTO: duration re-derived, OVERFLOW gone (bookableSlots == totalSlots).
+        // MANUAL → AUTO: duration re-derived (bookableSlots stays == totalSlots).
         given().contentType(ContentType.JSON).body("{ \"slotGenerationMode\": \"AUTO\" }")
             .when().put(twPath)
             .then().statusCode(200)
@@ -149,15 +149,16 @@ class ManualSlotDurationResourceTest {
     @Test
     void parallelismChangeLeavesManualWindowDurationUntouched() {
         String calendarId = createCalendar("msd-par-keep", 1);
-        // MANUAL 30-min slots over a 4h window: 8 slots fit; capacity 4, parallelism 1 → 4 OPEN + 4 OVERFLOW.
+        // MANUAL 30-min slots over a 4h window: 8 slots fit; all OPEN. capacity 4 caps total bookings.
         given().contentType(ContentType.JSON).body(timeWindowBody("MANUAL", 30, 8, 12, 4))
             .when().post(CALENDARS_PATH + "/" + calendarId + "/time-windows")
             .then().statusCode(201)
             .body("slotDurationMinutes", equalTo(30))
             .body("totalSlots", equalTo(8))
-            .body("bookableSlots", equalTo(4));
+            .body("bookableSlots", equalTo(8));
 
-        // Bump parallelism — a MANUAL window keeps its duration; only bookableSlots re-lays.
+        // Bump parallelism — a MANUAL window keeps its duration and slot count untouched
+        // (parallelism only changes each slot's per-slot capacity on regen).
         given().contentType(ContentType.JSON).body("{ \"parallelism\": 2 }")
             .when().put(CALENDARS_PATH + "/" + calendarId)
             .then().statusCode(200).body("parallelism", equalTo(2));
@@ -167,6 +168,6 @@ class ManualSlotDurationResourceTest {
             .body("[0].slotGenerationMode", equalTo("MANUAL"))
             .body("[0].slotDurationMinutes", equalTo(30))  // unchanged
             .body("[0].totalSlots", equalTo(8))            // unchanged
-            .body("[0].bookableSlots", equalTo(2));        // ceil(4/2)
+            .body("[0].bookableSlots", equalTo(8));        // unchanged (== totalSlots)
     }
 }

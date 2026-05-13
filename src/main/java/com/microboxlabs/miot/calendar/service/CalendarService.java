@@ -179,8 +179,8 @@ public class CalendarService {
         List<TimeWindow> timeWindows = TimeWindow.findActiveByCalendarId(calendarId);
         for (TimeWindow tw : timeWindows) {
             // Only AUTO windows re-derive their slot length from the new parallelism. MANUAL windows
-            // keep the admin-set duration; their bookable/overflow split still shifts on regen because
-            // bookableSlots() = ceil(capacity / parallelism) changed.
+            // keep the admin-set duration (and slot count); the new parallelism just changes each
+            // slot's per-slot capacity on regen — the window's total-capacity cap is unchanged.
             if (tw.slotGenerationMode == SlotGenerationMode.AUTO) {
                 tw.slotDurationMinutes = tw.computeSlotDurationMinutes();
             }
