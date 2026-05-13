@@ -48,8 +48,9 @@ class ManualWindowCapacityResourceTest {
             .then().statusCode(201)
             .extract().path("id");
 
-        // MANUAL 08-12 (240 min), 30-min slots → 8 slots, each capacity = parallelism (2);
-        // window capacity = 4 → only 4 bookings total fit (the 4 surplus cells stay empty).
+        // A MANUAL 08-12 window (240 minutes) with 30-minute slots fits 8 slots; each slot holds
+        // up to parallelism bookings (2 in this calendar). The window capacity is 4, so only 4
+        // bookings total fit across the day — the 4 surplus cells stay empty.
         given().contentType(ContentType.JSON)
             .body(String.format("""
                 {
