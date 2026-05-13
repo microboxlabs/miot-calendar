@@ -90,7 +90,8 @@ public class SlotResource {
     @POST
     @Path("/generate")
     @Transactional
-    @Operation(operationId = "generateSlots", summary = "Generate slots", description = "Generate booking slots for a calendar within a date range based on its time window configurations. Existing slots are skipped.")
+    @Operation(operationId = "generateSlots", summary = "Generate slots",
+        description = "Generate booking slots for a calendar within a date range based on its time window configurations. By default, existing slots are skipped (only gaps are filled). Pass `reprocess: true` to delete all unbooked slots in the range and regenerate them with the current config — useful after a time-window change or to convert legacy OVERFLOW rows produced by an older deploy. Booked slots are always preserved.")
     @APIResponse(responseCode = "200", description = "Slots generated successfully",
         content = @Content(schema = @Schema(implementation = GenerateSlotsResponse.class)))
     @APIResponse(responseCode = "400", description = "Invalid request",
@@ -101,7 +102,8 @@ public class SlotResource {
             GenerateSlotsResponse response = slotGeneratorService.generateSlots(
                 request.calendarId(),
                 request.startDate(),
-                request.endDate()
+                request.endDate(),
+                request.reprocessOrDefault()
             );
             return Response.ok(response).build();
         } catch (IllegalArgumentException e) {
