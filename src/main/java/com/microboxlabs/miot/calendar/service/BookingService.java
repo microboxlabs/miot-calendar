@@ -76,8 +76,10 @@ public class BookingService {
             )
         ));
 
-        // Validate the booking
-        validationService.validateBooking(slot, request.resource().id());
+        // Validate the booking. When the request is part of a reassignment, the client passes
+        // the soon-to-be-cancelled old booking's id so the window-capacity check doesn't double-
+        // count it (the cancel runs after this create succeeds).
+        validationService.validateBooking(slot, request.resource().id(), request.excludeBookingId());
 
         // Get calendar
         Calendar calendar = Calendar.findById(request.calendarId());

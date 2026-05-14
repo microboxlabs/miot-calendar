@@ -9,6 +9,8 @@ import com.microboxlabs.miot.calendar.model.TimeWindowKind;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 
+import java.util.UUID;
+
 /**
  * Service for validating bookings
  */
@@ -19,28 +21,47 @@ public class BookingValidationService {
 
     /**
      * Validate a booking request
-     * 
+     *
      * @param slot The slot to book
      * @param resourceId The resource to book
      * @throws BookingValidationException if validation fails
      */
     public void validateBooking(Slot slot, String resourceId) {
+        validateBooking(slot, resourceId, null);
+    }
+
+    /**
+     * Validate a booking request, optionally excluding an existing booking from the window-capacity
+     * count. Used during reassignment, where the new booking is created before the old one is
+     * cancelled — without the exclude, a window-internal move into a full window would always fail
+     * (the moved booking would be counted twice).
+     *
+     * <p>The exclude only applies to {@link #validateWindowCapacity}. Slot-capacity and
+     * resource-not-in-slot checks are per-target-slot, and a window-internal move targets a
+     * different slot than the original, so the old booking can't be in either of those counts.
+     *
+     * @param slot The slot to book
+     * @param resourceId The resource to book
+     * @param excludeBookingId Booking id to exclude from the window-capacity count, or {@code null}
+     * @throws BookingValidationException if validation fails
+     */
+    public void validateBooking(Slot slot, String resourceId, UUID excludeBookingId) {
         // 1. Check slot status
         validateSlotStatus(slot);
 
         // 2. Check the parent window's total-capacity cap (MANUAL windows)
-        validateWindowCapacity(slot);
+        validateWindowCapacity(slot, excludeBookingId);
 
         // 3. Check slot capacity
         validateSlotCapacity(slot);
 
         // 4. Check resource not already in slot
         validateResourceNotInSlot(slot, resourceId);
-        
+
         // 5. Optional: Check resource not already booked on same day
         // This is commented out as it may not always be required
         // validateResourceNotBookedOnDate(slot.slotDate, resourceId);
-        
+
         LOG.debugf("Booking validation passed for slot %s, resource %s", slot.id, resourceId);
     }
 
@@ -77,13 +98,13 @@ public class BookingValidationService {
      * of order or of the target slot's own remaining room. AUTO windows are sized so that the slot
      * capacities sum exactly to the window capacity, so they need no extra check.
      */
-    private void validateWindowCapacity(Slot slot) {
+    private void validateWindowCapacity(Slot slot, UUID excludeBookingId) {
         TimeWindow tw = slot.timeWindow;
         if (tw == null || tw.kind != TimeWindowKind.WINDOW
                 || tw.slotGenerationMode != SlotGenerationMode.MANUAL) {
             return;
         }
-        long dayTotal = Booking.countByWindowAndDate(tw.id, slot.slotDate);
+        long dayTotal = Booking.countByWindowAndDate(tw.id, slot.slotDate, excludeBookingId);
         if (dayTotal >= tw.capacity) {
             throw new BookingValidationException(
                 String.format("Time window '%s' is full for %s (%d/%d)",

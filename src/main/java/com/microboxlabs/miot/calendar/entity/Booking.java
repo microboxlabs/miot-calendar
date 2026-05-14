@@ -138,7 +138,23 @@ public class Booking extends PanacheEntityBase {
      * window's total-capacity cap (the cap applies across all of the window's slots for the day).
      */
     public static long countByWindowAndDate(UUID timeWindowId, LocalDate date) {
-        return count("slot.timeWindow.id = ?1 and slotDate = ?2", timeWindowId, date);
+        return countByWindowAndDate(timeWindowId, date, null);
+    }
+
+    /**
+     * Same as {@link #countByWindowAndDate(UUID, LocalDate)} but excludes a specific booking from
+     * the count. Used during reassignment: the client creates the new booking before cancelling
+     * the old one, so the old booking still exists when the validator runs. Without this exclude
+     * a window-internal move into a full window would be impossible (the moved booking would be
+     * counted twice). Passing {@code null} is equivalent to the no-exclude variant; passing a
+     * UUID that doesn't match any booking in the window+date is safely a no-op.
+     */
+    public static long countByWindowAndDate(UUID timeWindowId, LocalDate date, UUID excludeBookingId) {
+        if (excludeBookingId == null) {
+            return count("slot.timeWindow.id = ?1 and slotDate = ?2", timeWindowId, date);
+        }
+        return count("slot.timeWindow.id = ?1 and slotDate = ?2 and id <> ?3",
+            timeWindowId, date, excludeBookingId);
     }
 
     /**

@@ -16,7 +16,13 @@ public record BookingRequest(
     ResourceData resource,
 
     @Schema(required = true, description = "Slot date and time to book")
-    SlotData slot
+    SlotData slot,
+
+    @Schema(description = "Identifier of an existing booking to exclude from window-capacity "
+        + "counting. Used during reassignment: the client creates the new booking before "
+        + "cancelling the old one, so the validator must not double-count the old booking "
+        + "against the window's day-cap.", format = "uuid")
+    UUID excludeBookingId
 ) {
     /**
      * Validate the booking request

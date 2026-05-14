@@ -92,6 +92,21 @@ class ManualWindowCapacityResourceTest {
             .thenReturn();
     }
 
+    private Response bookExcluding(String calendarId, String resourceId, int hour, int minutes,
+            String excludeBookingId) {
+        return given().contentType(ContentType.JSON)
+            .body(String.format("""
+                {
+                    "calendarId": "%s",
+                    "resource": { "id": "%s", "type": "SERVICE", "label": "%s" },
+                    "slot": { "date": "%s", "hour": %d, "minutes": %d },
+                    "excludeBookingId": "%s"
+                }
+                """, calendarId, resourceId, resourceId, SLOT_DATE, hour, minutes, excludeBookingId))
+            .when().post(BOOKINGS_PATH)
+            .thenReturn();
+    }
+
     private String bookOk(String calendarId, String resourceId, int hour, int minutes) {
         return book(calendarId, resourceId, hour, minutes)
             .then().statusCode(201)
@@ -113,6 +128,38 @@ class ManualWindowCapacityResourceTest {
         // 5th into a partially-full slot (09:00 has room: 1/2) → still rejected; the cap is on the
         // window's total bookings, in any slot, in any order.
         book(calendarId, "R6", 9, 30).then().statusCode(409);
+    }
+
+    @Test
+    void reassignmentInsideAFullWindowSucceedsWithExcludeBookingId() {
+        // Reassignment flow: the planner creates a new booking before cancelling the old one,
+        // so the old booking is still alive when the validator runs. Without the exclude, a
+        // window-internal move into a full window would always fail (the booking being moved
+        // would be counted twice). Passing `excludeBookingId` makes the validator subtract it
+        // from the day-cap count.
+        String calendarId = createCalendarWithManualWindow("mwc-reassign");
+
+        bookOk(calendarId, "R1", 8, 0);
+        bookOk(calendarId, "R2", 8, 30);
+        bookOk(calendarId, "R3", 9, 0);
+        String fourth = bookOk(calendarId, "R4", 9, 30);
+
+        // Window is at 4/4. A plain create anywhere is rejected.
+        book(calendarId, "R5", 10, 0).then().statusCode(409);
+
+        // The same plain create — moving R4 to 10:00 — is also rejected because R4 still
+        // exists at 09:30 (the cancel hasn't run yet).
+        book(calendarId, "R4", 10, 0).then().statusCode(409);
+
+        // With excludeBookingId set to R4's current booking, the move succeeds: the validator
+        // sees 3 bookings (R1..R3) instead of 4, so the window has room for the new one.
+        bookExcluding(calendarId, "R4", 10, 0, fourth).then().statusCode(201);
+
+        // The old booking is still there until the client cancels it — at this point the
+        // window genuinely holds 5 bookings, all of them legal because the day-cap was only
+        // evaluated against the post-cancel state. The client now cancels R4@09:30 to
+        // bring the window back to 4/4.
+        given().when().delete(BOOKINGS_PATH + "/" + fourth).then().statusCode(204);
     }
 
     @Test
