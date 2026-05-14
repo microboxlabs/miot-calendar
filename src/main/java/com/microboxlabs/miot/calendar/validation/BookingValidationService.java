@@ -9,8 +9,6 @@ import com.microboxlabs.miot.calendar.model.TimeWindowKind;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 
-import java.util.UUID;
-
 /**
  * Service for validating bookings
  */
@@ -20,37 +18,18 @@ public class BookingValidationService {
     private static final Logger LOG = Logger.getLogger(BookingValidationService.class);
 
     /**
-     * Validate a booking request
+     * Validate a booking create request.
      *
      * @param slot The slot to book
      * @param resourceId The resource to book
      * @throws BookingValidationException if validation fails
      */
     public void validateBooking(Slot slot, String resourceId) {
-        validateBooking(slot, resourceId, null);
-    }
-
-    /**
-     * Validate a booking request, optionally excluding an existing booking from the window-capacity
-     * count. Used during reassignment, where the new booking is created before the old one is
-     * cancelled — without the exclude, a window-internal move into a full window would always fail
-     * (the moved booking would be counted twice).
-     *
-     * <p>The exclude only applies to {@link #validateWindowCapacity}. Slot-capacity and
-     * resource-not-in-slot checks are per-target-slot, and a window-internal move targets a
-     * different slot than the original, so the old booking can't be in either of those counts.
-     *
-     * @param slot The slot to book
-     * @param resourceId The resource to book
-     * @param excludeBookingId Booking id to exclude from the window-capacity count, or {@code null}
-     * @throws BookingValidationException if validation fails
-     */
-    public void validateBooking(Slot slot, String resourceId, UUID excludeBookingId) {
         // 1. Check slot status
         validateSlotStatus(slot);
 
         // 2. Check the parent window's total-capacity cap (MANUAL windows)
-        validateWindowCapacity(slot, excludeBookingId);
+        validateWindowCapacity(slot);
 
         // 3. Check slot capacity
         validateSlotCapacity(slot);
@@ -63,6 +42,52 @@ public class BookingValidationService {
         // validateResourceNotBookedOnDate(slot.slotDate, resourceId);
 
         LOG.debugf("Booking validation passed for slot %s, resource %s", slot.id, resourceId);
+    }
+
+    /**
+     * Validate moving an existing booking to {@code newSlot}.
+     *
+     * <p>A move is one booking row whose slot reference changes — the source has its occupancy
+     * decremented, the target has its occupancy incremented, no row is created or deleted. So the
+     * checks differ from create-path validation:
+     *
+     * <ul>
+     *   <li><b>Slot status</b> on the target — same as create.
+     *   <li><b>Window capacity</b> — skipped when the move stays inside the same window+date (the
+     *       day-cap count is unchanged). For cross-window or cross-date moves the standard cap
+     *       check applies to the target window only; the source can never overflow from a move.
+     *   <li><b>Slot capacity</b> on the target — same as create.
+     *   <li><b>Resource-not-in-target</b> — a row at the target with this resource is a duplicate
+     *       only if it is not the booking being moved itself. Callers must only invoke this when
+     *       the source and target slots differ, so the booking under move can never be at the
+     *       target.
+     * </ul>
+     *
+     * @param oldSlot The booking's current slot
+     * @param newSlot The slot to move into; must differ from {@code oldSlot}
+     * @param resourceId The booking's resource id (carried over from the existing booking)
+     * @throws BookingValidationException if validation fails
+     */
+    public void validateMove(Slot oldSlot, Slot newSlot, String resourceId) {
+        validateSlotStatus(newSlot);
+
+        // A same-window+same-date move leaves the day-cap count unchanged (one booking out, one
+        // booking in) so there is nothing to check. Cross-window or cross-date adds 1 to the
+        // target window's count for the date; apply the standard cap check there.
+        boolean sameWindowAndDate =
+            oldSlot.timeWindow != null
+                && newSlot.timeWindow != null
+                && oldSlot.timeWindow.id.equals(newSlot.timeWindow.id)
+                && oldSlot.slotDate.equals(newSlot.slotDate);
+        if (!sameWindowAndDate) {
+            validateWindowCapacity(newSlot);
+        }
+
+        validateSlotCapacity(newSlot);
+        validateResourceNotInSlot(newSlot, resourceId);
+
+        LOG.debugf("Move validation passed: slot %s -> %s, resource %s",
+            oldSlot.id, newSlot.id, resourceId);
     }
 
     /**
@@ -98,13 +123,13 @@ public class BookingValidationService {
      * of order or of the target slot's own remaining room. AUTO windows are sized so that the slot
      * capacities sum exactly to the window capacity, so they need no extra check.
      */
-    private void validateWindowCapacity(Slot slot, UUID excludeBookingId) {
+    private void validateWindowCapacity(Slot slot) {
         TimeWindow tw = slot.timeWindow;
         if (tw == null || tw.kind != TimeWindowKind.WINDOW
                 || tw.slotGenerationMode != SlotGenerationMode.MANUAL) {
             return;
         }
-        long dayTotal = Booking.countByWindowAndDate(tw.id, slot.slotDate, excludeBookingId);
+        long dayTotal = Booking.countByWindowAndDate(tw.id, slot.slotDate);
         if (dayTotal >= tw.capacity) {
             throw new BookingValidationException(
                 String.format("Time window '%s' is full for %s (%d/%d)",
@@ -120,7 +145,7 @@ public class BookingValidationService {
     private void validateSlotCapacity(Slot slot) {
         if (slot.currentOccupancy >= slot.capacity) {
             throw new BookingValidationException(
-                String.format("Slot has no available capacity (%d/%d)", 
+                String.format("Slot has no available capacity (%d/%d)",
                     slot.currentOccupancy, slot.capacity),
                 "NO_CAPACITY"
             );

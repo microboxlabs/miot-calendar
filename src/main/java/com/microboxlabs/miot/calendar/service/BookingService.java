@@ -4,6 +4,7 @@ import com.microboxlabs.miot.calendar.entity.Booking;
 import com.microboxlabs.miot.calendar.entity.Calendar;
 import com.microboxlabs.miot.calendar.entity.Slot;
 import com.microboxlabs.miot.calendar.model.BookingRequest;
+import com.microboxlabs.miot.calendar.model.MoveBookingRequest;
 import com.microboxlabs.miot.calendar.model.ResourceData;
 import com.microboxlabs.miot.calendar.validation.BookingValidationService;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -76,10 +77,8 @@ public class BookingService {
             )
         ));
 
-        // Validate the booking. When the request is part of a reassignment, the client passes
-        // the soon-to-be-cancelled old booking's id so the window-capacity check doesn't double-
-        // count it (the cancel runs after this create succeeds).
-        validationService.validateBooking(slot, request.resource().id(), request.excludeBookingId());
+        // Validate the booking
+        validationService.validateBooking(slot, request.resource().id());
 
         // Get calendar
         Calendar calendar = Calendar.findById(request.calendarId());
@@ -107,6 +106,82 @@ public class BookingService {
 
         LOG.infof("Created booking %s for resource %s in slot %s",
             booking.id, booking.resourceId, slot.id);
+
+        return booking;
+    }
+
+    /**
+     * Move an existing booking to a different slot in the same calendar, optionally refreshing the
+     * resource payload at the same time.
+     *
+     * <p>The booking id is preserved across the move — a {@code POST /bookings/{id}/move} call
+     * never creates or deletes a row. This is what makes reassignment atomic from the client's
+     * perspective: the planner no longer has to issue a create + cancel pair where a failed
+     * cancel would leave a ghost booking.
+     *
+     * <p>When the target slot equals the current slot the call collapses to a resource-only
+     * update (no occupancy changes, no move-validation). A {@code null} {@code request.resource()}
+     * leaves the existing payload untouched; when provided the resource id must match the
+     * booking's current resource id (a booking cannot be repointed to a different resource).
+     */
+    @Transactional
+    public Booking moveBooking(UUID bookingId, MoveBookingRequest request) {
+        request.validate();
+
+        Booking booking = Booking.findById(bookingId);
+        if (booking == null) {
+            throw new IllegalArgumentException("Booking not found: " + bookingId);
+        }
+
+        ResourceData newResource = request.resource();
+        if (newResource != null && !newResource.id().equals(booking.resourceId)) {
+            throw new IllegalArgumentException(String.format(
+                "Resource id mismatch: booking %s is for resource %s, cannot move with resource %s",
+                bookingId, booking.resourceId, newResource.id()));
+        }
+
+        Slot oldSlot = booking.slot;
+        Slot newSlot = slotService.getSlotByDateTime(
+            booking.calendar.id,
+            request.slot().date(),
+            request.slot().hour(),
+            request.slot().minutes()
+        ).orElseThrow(() -> new IllegalArgumentException(
+            String.format("Slot not found for calendar %s at %s %02d:%02d",
+                booking.calendar.id,
+                request.slot().date(),
+                request.slot().hour(),
+                request.slot().minutes()
+            )
+        ));
+
+        boolean slotChanged = !oldSlot.id.equals(newSlot.id);
+
+        if (slotChanged) {
+            validationService.validateMove(oldSlot, newSlot, booking.resourceId);
+        }
+
+        if (slotChanged) {
+            booking.slot = newSlot;
+            booking.slotDate = newSlot.slotDate;
+            booking.slotHour = newSlot.slotHour;
+            booking.slotMinutes = newSlot.slotMinutes;
+        }
+        if (newResource != null) {
+            booking.resourceType = newResource.type();
+            booking.resourceLabel = newResource.label();
+            booking.resourceData = newResource.data();
+        }
+        booking.persist();
+
+        if (slotChanged) {
+            slotService.decrementOccupancy(oldSlot);
+            slotService.incrementOccupancy(newSlot);
+            LOG.infof("Moved booking %s for resource %s from slot %s to slot %s",
+                booking.id, booking.resourceId, oldSlot.id, newSlot.id);
+        } else {
+            LOG.infof("Updated booking %s payload in place (slot unchanged)", booking.id);
+        }
 
         return booking;
     }

@@ -104,7 +104,7 @@ public class BookingResource {
     @PUT
     @Path("/{id}")
     @Transactional
-    @Operation(operationId = "updateBooking", summary = "Update booking resource data", description = "Update an existing booking's resource payload in place. The slot is not changed; move a booking by cancelling and recreating it.")
+    @Operation(operationId = "updateBooking", summary = "Update booking resource data", description = "Update an existing booking's resource payload in place. The slot is not changed; use POST /bookings/{id}/move to move a booking (or update its payload as part of a move).")
     @APIResponse(responseCode = "200", description = "Booking updated",
         content = @Content(schema = @Schema(implementation = BookingResponse.class)))
     @APIResponse(responseCode = "400", description = "Invalid request (e.g. missing resource or resource id mismatch)",
@@ -130,6 +130,49 @@ public class BookingResource {
             LOG.warnf("Invalid booking update request: %s", e.getMessage());
             return Response.status(Response.Status.BAD_REQUEST)
                 .entity(ErrorResponse.badRequest(e.getMessage()))
+                .build();
+        }
+    }
+
+    @POST
+    @Path("/{id}/move")
+    @Transactional
+    @Operation(operationId = "moveBooking", summary = "Move booking",
+        description = "Move an existing booking to a different slot in the same calendar (and "
+            + "optionally refresh its resource payload) as a single transactional operation. The "
+            + "booking id is preserved across the move; no row is created or deleted. A same-slot "
+            + "request collapses to a payload-only update (occupancy is not touched).")
+    @APIResponse(responseCode = "200", description = "Booking moved",
+        content = @Content(schema = @Schema(implementation = BookingResponse.class)))
+    @APIResponse(responseCode = "400", description = "Invalid request (e.g. missing slot, resource id mismatch, slot not found in this calendar)",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "404", description = "Booking not found",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "409", description = "Move violates validation (target full, blocked, resource already at target, etc.)",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public Response moveBooking(
+            @Parameter(description = "Unique identifier of the booking to move", required = true) @PathParam("id") UUID id,
+            MoveBookingRequest request) {
+        try {
+            if (request == null) {
+                throw new IllegalArgumentException("Request body is required");
+            }
+            Booking booking = bookingService.moveBooking(id, request);
+            return Response.ok(BookingResponse.from(booking)).build();
+        } catch (IllegalArgumentException e) {
+            if (e.getMessage() != null && e.getMessage().startsWith("Booking not found")) {
+                return Response.status(Response.Status.NOT_FOUND)
+                    .entity(ErrorResponse.notFound(e.getMessage()))
+                    .build();
+            }
+            LOG.warnf("Invalid booking move request: %s", e.getMessage());
+            return Response.status(Response.Status.BAD_REQUEST)
+                .entity(ErrorResponse.badRequest(e.getMessage()))
+                .build();
+        } catch (BookingValidationException e) {
+            LOG.warnf("Move validation failed: %s (%s)", e.getMessage(), e.getErrorCode());
+            return Response.status(Response.Status.CONFLICT)
+                .entity(ErrorResponse.conflict(e.getMessage()))
                 .build();
         }
     }
