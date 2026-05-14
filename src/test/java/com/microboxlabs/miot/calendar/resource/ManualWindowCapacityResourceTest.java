@@ -98,6 +98,15 @@ class ManualWindowCapacityResourceTest {
             .extract().path("id");
     }
 
+    private Response move(String bookingId, int hour, int minutes) {
+        return given().contentType(ContentType.JSON)
+            .body(String.format("""
+                { "slot": { "date": "%s", "hour": %d, "minutes": %d } }
+                """, SLOT_DATE, hour, minutes))
+            .when().post(BOOKINGS_PATH + "/" + bookingId + "/move")
+            .thenReturn();
+    }
+
     @Test
     void rejectsBookingsBeyondWindowCapacityRegardlessOfSlot() {
         String calendarId = createCalendarWithManualWindow("mwc-reject");
@@ -113,6 +122,67 @@ class ManualWindowCapacityResourceTest {
         // 5th into a partially-full slot (09:00 has room: 1/2) → still rejected; the cap is on the
         // window's total bookings, in any slot, in any order.
         book(calendarId, "R6", 9, 30).then().statusCode(409);
+    }
+
+    @Test
+    void moveInsideAFullWindowSucceeds() {
+        // Reassignment is one atomic /move call — the booking row is re-pointed at the new slot,
+        // not deleted-and-recreated. So the day-cap count is unchanged by an in-window move and
+        // the validator must allow it even when the window is at exactly capacity.
+        String calendarId = createCalendarWithManualWindow("mwc-move");
+
+        bookOk(calendarId, "R1", 8, 0);
+        bookOk(calendarId, "R2", 8, 30);
+        bookOk(calendarId, "R3", 9, 0);
+        String fourth = bookOk(calendarId, "R4", 9, 30);
+
+        // Window is at 4/4. A plain create anywhere is still rejected.
+        book(calendarId, "R5", 10, 0).then().statusCode(409);
+
+        // Moving R4 from 09:30 to 10:00 keeps the window at 4/4 (one out, one in) — allowed.
+        move(fourth, 10, 0)
+            .then().statusCode(200)
+            .body("id", equalTo(fourth))
+            .body("slot.hour", equalTo(10))
+            .body("slot.minutes", equalTo(0));
+
+        // No row was created or deleted — a fresh create still hits the cap.
+        book(calendarId, "R5", 11, 30).then().statusCode(409);
+    }
+
+    @Test
+    void moveRejectedWhenTargetSlotAtCapacity() {
+        // Cross-slot moves still respect per-slot capacity (parallelism=2). Filling 08:00 to 2/2
+        // and trying to move a booking from 09:00 into 08:00 must be rejected.
+        String calendarId = createCalendarWithManualWindow("mwc-move-slot-full");
+
+        bookOk(calendarId, "R1", 8, 0);
+        bookOk(calendarId, "R2", 8, 0);
+        String third = bookOk(calendarId, "R3", 9, 0);
+
+        move(third, 8, 0).then().statusCode(409);
+    }
+
+    @Test
+    void sameSlotMoveCollapsesToPayloadUpdate() {
+        // Moving a booking to the slot it already occupies is a no-op for the day-cap and slot
+        // counters — it's just a way to refresh the resource payload as part of a single call.
+        String calendarId = createCalendarWithManualWindow("mwc-move-same");
+
+        bookOk(calendarId, "R1", 8, 0);
+        bookOk(calendarId, "R2", 8, 30);
+        bookOk(calendarId, "R3", 9, 0);
+        String fourth = bookOk(calendarId, "R4", 9, 30);
+
+        // Same-slot move with no resource override succeeds and leaves the cap untouched.
+        move(fourth, 9, 30)
+            .then().statusCode(200)
+            .body("id", equalTo(fourth))
+            .body("slot.hour", equalTo(9))
+            .body("slot.minutes", equalTo(30));
+
+        // Window is still at 4/4; a fresh create elsewhere is still rejected.
+        book(calendarId, "R5", 10, 0).then().statusCode(409);
     }
 
     @Test
