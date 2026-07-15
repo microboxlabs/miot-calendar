@@ -7,6 +7,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
@@ -83,12 +84,12 @@ public class Booking extends PanacheEntityBase {
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {
-            createdAt = ZonedDateTime.now();
+            createdAt = ZonedDateTime.now(ZoneOffset.UTC);
         }
         if (status == null) {
             status = BookingStatus.PLANNED;
         }
-        updatedAt = ZonedDateTime.now();
+        updatedAt = ZonedDateTime.now(ZoneOffset.UTC);
         
         // Denormalize slot data
         if (slot != null) {
@@ -100,7 +101,7 @@ public class Booking extends PanacheEntityBase {
 
     @PreUpdate
     public void preUpdate() {
-        updatedAt = ZonedDateTime.now();
+        updatedAt = ZonedDateTime.now(ZoneOffset.UTC);
     }
 
     // Finder methods

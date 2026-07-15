@@ -275,22 +275,7 @@ public class BookingService {
 
         BookingStatus targetStatus = BookingStatus.parse(rawStatus);
         for (Booking booking : bookings) {
-            if (targetStatus != null && targetStatus != booking.status) {
-                if (!booking.status.canTransitionTo(targetStatus)) {
-                    throw new BookingValidationException(String.format(
-                        "Status regression: booking %s is %s, cannot go back to %s",
-                        booking.id, booking.status, targetStatus), "STATUS_REGRESSION");
-                }
-                booking.status = targetStatus;
-            }
-            if (resourceDataPatch != null && !resourceDataPatch.isEmpty()) {
-                Map<String, Object> merged = booking.resourceData == null
-                    ? new HashMap<>()
-                    : new HashMap<>(booking.resourceData);
-                merged.putAll(resourceDataPatch);
-                booking.resourceData = merged;
-            }
-            booking.persist();
+            applyPatch(booking, targetStatus, resourceDataPatch);
         }
 
         LOG.infof("Patched %d booking(s) for resource %s (status %s, %d data key(s))",
@@ -299,6 +284,32 @@ public class BookingService {
             resourceDataPatch != null ? resourceDataPatch.size() : 0);
 
         return bookings;
+    }
+
+    /**
+     * Apply one resource patch to a single booking: forward-only status move
+     * (regression throws {@code STATUS_REGRESSION}) and a shallow resource-data
+     * merge, then persist. Extracted from {@link #patchBookingsByResource} so
+     * the per-booking branching stays out of the loop.
+     */
+    private static void applyPatch(Booking booking, BookingStatus targetStatus,
+                                   Map<String, Object> resourceDataPatch) {
+        if (targetStatus != null && targetStatus != booking.status) {
+            if (!booking.status.canTransitionTo(targetStatus)) {
+                throw new BookingValidationException(String.format(
+                    "Status regression: booking %s is %s, cannot go back to %s",
+                    booking.id, booking.status, targetStatus), "STATUS_REGRESSION");
+            }
+            booking.status = targetStatus;
+        }
+        if (resourceDataPatch != null && !resourceDataPatch.isEmpty()) {
+            Map<String, Object> merged = booking.resourceData == null
+                ? new HashMap<>()
+                : new HashMap<>(booking.resourceData);
+            merged.putAll(resourceDataPatch);
+            booking.resourceData = merged;
+        }
+        booking.persist();
     }
 
     /**

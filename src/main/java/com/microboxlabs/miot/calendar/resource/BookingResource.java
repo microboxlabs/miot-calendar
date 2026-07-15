@@ -18,6 +18,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,6 +32,8 @@ import java.util.UUID;
 public class BookingResource {
 
     private static final Logger LOG = Logger.getLogger(BookingResource.class);
+    /** Prefix of the service's not-found message, matched to map to a 404. */
+    private static final String BOOKING_NOT_FOUND = "Booking not found";
 
     @Inject
     BookingService bookingService;
@@ -45,9 +48,11 @@ public class BookingResource {
             @Parameter(description = "End date of the range (inclusive, defaults to start + 30 days)", schema = @Schema(format = "date")) @QueryParam("endDate") LocalDate endDate,
             @Parameter(description = "Filter bookings by lifecycle status") @QueryParam("status") String status) {
 
-        // Default to today if no dates provided
+        // Default to today if no dates provided. systemDefault() is explicit
+        // (Sonar S8688) while preserving the prior no-arg behavior; callers
+        // normally pass an explicit range, so this default is a convenience.
         if (startDate == null) {
-            startDate = LocalDate.now();
+            startDate = LocalDate.now(ZoneId.systemDefault());
         }
         if (endDate == null) {
             endDate = startDate.plusDays(30);
@@ -134,7 +139,7 @@ public class BookingResource {
             Booking booking = bookingService.updateBookingResource(id, request.resource(), request.status());
             return Response.ok(BookingResponse.from(booking)).build();
         } catch (IllegalArgumentException e) {
-            if (e.getMessage() != null && e.getMessage().startsWith("Booking not found")) {
+            if (e.getMessage() != null && e.getMessage().startsWith(BOOKING_NOT_FOUND)) {
                 return Response.status(Response.Status.NOT_FOUND)
                     .entity(ErrorResponse.notFound(e.getMessage()))
                     .build();
@@ -177,7 +182,7 @@ public class BookingResource {
             Booking booking = bookingService.moveBooking(id, request);
             return Response.ok(BookingResponse.from(booking)).build();
         } catch (IllegalArgumentException e) {
-            if (e.getMessage() != null && e.getMessage().startsWith("Booking not found")) {
+            if (e.getMessage() != null && e.getMessage().startsWith(BOOKING_NOT_FOUND)) {
                 return Response.status(Response.Status.NOT_FOUND)
                     .entity(ErrorResponse.notFound(e.getMessage()))
                     .build();
@@ -254,7 +259,7 @@ public class BookingResource {
                 resourceId, calendarId, request.resourceData(), request.status());
             return Response.ok(BookingListResponse.from(bookings)).build();
         } catch (IllegalArgumentException e) {
-            if (e.getMessage() != null && e.getMessage().startsWith("Booking not found")) {
+            if (e.getMessage() != null && e.getMessage().startsWith(BOOKING_NOT_FOUND)) {
                 return Response.status(Response.Status.NOT_FOUND)
                     .entity(ErrorResponse.notFound(e.getMessage()))
                     .build();
