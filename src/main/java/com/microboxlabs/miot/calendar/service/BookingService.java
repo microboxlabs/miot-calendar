@@ -4,9 +4,11 @@ import com.microboxlabs.miot.calendar.entity.Booking;
 import com.microboxlabs.miot.calendar.entity.Calendar;
 import com.microboxlabs.miot.calendar.entity.Slot;
 import com.microboxlabs.miot.calendar.model.BookingRequest;
+import com.microboxlabs.miot.calendar.model.BookingStatus;
 import com.microboxlabs.miot.calendar.model.MoveBookingRequest;
 import com.microboxlabs.miot.calendar.model.ResourceData;
 import com.microboxlabs.miot.calendar.validation.BookingValidationService;
+import com.microboxlabs.miot.calendar.validation.BookingValidationService.BookingValidationException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -97,6 +99,8 @@ public class BookingService {
         booking.resourceType = request.resource().type();
         booking.resourceLabel = request.resource().label();
         booking.resourceData = request.resource().data();
+        BookingStatus initialStatus = BookingStatus.parse(request.status());
+        booking.status = initialStatus != null ? initialStatus : BookingStatus.PLANNED;
         booking.createdBy = createdBy;
 
         booking.persist();
@@ -166,6 +170,10 @@ public class BookingService {
             booking.slotDate = newSlot.slotDate;
             booking.slotHour = newSlot.slotHour;
             booking.slotMinutes = newSlot.slotMinutes;
+            // The documented status-regression exception: a re-plan to a new
+            // slot restarts the lifecycle. Same-slot payload refreshes keep
+            // the current status.
+            booking.status = BookingStatus.PLANNED;
         }
         if (newResource != null) {
             booking.resourceType = newResource.type();
@@ -187,33 +195,52 @@ public class BookingService {
     }
 
     /**
-     * Update an existing booking's resource payload in place.
+     * Update an existing booking in place: its resource payload, its
+     * lifecycle status, or both.
      *
-     * <p>Only {@code resourceType}, {@code resourceLabel} and {@code resourceData}
-     * change — the slot stays the same. The request's resource id must match the
-     * booking's current resource id; a booking cannot be repointed to a different
-     * resource (use cancel + create for that).
+     * <p>The slot stays the same. When a resource is given its id must match
+     * the booking's current resource id; a booking cannot be repointed to a
+     * different resource (use cancel + create for that). When a status is
+     * given it must be a forward transition (same-status is a no-op);
+     * regressions throw a {@link BookingValidationException} with code
+     * {@code STATUS_REGRESSION} — the only sanctioned way back to PLANNED is
+     * a move to a different slot (see {@link #moveBooking}).
      */
     @Transactional
-    public Booking updateBookingResource(UUID bookingId, ResourceData resource) {
+    public Booking updateBookingResource(UUID bookingId, ResourceData resource, String rawStatus) {
         Booking booking = Booking.findById(bookingId);
         if (booking == null) {
             throw new IllegalArgumentException("Booking not found: " + bookingId);
         }
 
-        resource.validate();
-        if (!resource.id().equals(booking.resourceId)) {
-            throw new IllegalArgumentException(String.format(
-                "Resource id mismatch: booking %s is for resource %s, cannot update to %s",
-                bookingId, booking.resourceId, resource.id()));
+        if (resource != null) {
+            resource.validate();
+            if (!resource.id().equals(booking.resourceId)) {
+                throw new IllegalArgumentException(String.format(
+                    "Resource id mismatch: booking %s is for resource %s, cannot update to %s",
+                    bookingId, booking.resourceId, resource.id()));
+            }
         }
 
-        booking.resourceType = resource.type();
-        booking.resourceLabel = resource.label();
-        booking.resourceData = resource.data();
+        BookingStatus targetStatus = BookingStatus.parse(rawStatus);
+        if (targetStatus != null && targetStatus != booking.status) {
+            if (!booking.status.canTransitionTo(targetStatus)) {
+                throw new BookingValidationException(String.format(
+                    "Status regression: booking %s is %s, cannot go back to %s",
+                    bookingId, booking.status, targetStatus), "STATUS_REGRESSION");
+            }
+            booking.status = targetStatus;
+        }
+
+        if (resource != null) {
+            booking.resourceType = resource.type();
+            booking.resourceLabel = resource.label();
+            booking.resourceData = resource.data();
+        }
         booking.persist();
 
-        LOG.infof("Updated booking %s resource data for resource %s", booking.id, booking.resourceId);
+        LOG.infof("Updated booking %s (resource %s, status %s)",
+            booking.id, booking.resourceId, booking.status);
 
         return booking;
     }

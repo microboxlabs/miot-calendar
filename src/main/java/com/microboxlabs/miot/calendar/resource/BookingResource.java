@@ -104,12 +104,14 @@ public class BookingResource {
     @PUT
     @Path("/{id}")
     @Transactional
-    @Operation(operationId = "updateBooking", summary = "Update booking resource data", description = "Update an existing booking's resource payload in place. The slot is not changed; use POST /bookings/{id}/move to move a booking (or update its payload as part of a move).")
+    @Operation(operationId = "updateBooking", summary = "Update booking resource data and/or status", description = "Update an existing booking in place: its resource payload, its lifecycle status, or both. The slot is not changed; use POST /bookings/{id}/move to move a booking (or update its payload as part of a move). Status moves are forward-only; the only way back to PLANNED is a move to a different slot.")
     @APIResponse(responseCode = "200", description = "Booking updated",
         content = @Content(schema = @Schema(implementation = BookingResponse.class)))
-    @APIResponse(responseCode = "400", description = "Invalid request (e.g. missing resource or resource id mismatch)",
+    @APIResponse(responseCode = "400", description = "Invalid request (e.g. empty body, unknown status, or resource id mismatch)",
         content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @APIResponse(responseCode = "404", description = "Booking not found",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "409", description = "Status regression rejected",
         content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     public Response updateBooking(
             @Parameter(description = "Unique identifier of the booking to update", required = true) @PathParam("id") UUID id,
@@ -119,7 +121,7 @@ public class BookingResource {
                 throw new IllegalArgumentException("Request body is required");
             }
             request.validate();
-            Booking booking = bookingService.updateBookingResource(id, request.resource());
+            Booking booking = bookingService.updateBookingResource(id, request.resource(), request.status());
             return Response.ok(BookingResponse.from(booking)).build();
         } catch (IllegalArgumentException e) {
             if (e.getMessage() != null && e.getMessage().startsWith("Booking not found")) {
@@ -130,6 +132,11 @@ public class BookingResource {
             LOG.warnf("Invalid booking update request: %s", e.getMessage());
             return Response.status(Response.Status.BAD_REQUEST)
                 .entity(ErrorResponse.badRequest(e.getMessage()))
+                .build();
+        } catch (BookingValidationException e) {
+            LOG.warnf("Booking status update rejected: %s (%s)", e.getMessage(), e.getErrorCode());
+            return Response.status(Response.Status.CONFLICT)
+                .entity(ErrorResponse.conflict(e.getMessage()))
                 .build();
         }
     }

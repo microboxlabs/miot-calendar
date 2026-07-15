@@ -16,8 +16,16 @@ public record BookingRequest(
     ResourceData resource,
 
     @Schema(required = true, description = "Slot date and time to book")
-    SlotData slot
+    SlotData slot,
+
+    @Schema(description = "Initial lifecycle status (defaults to PLANNED)", examples = {"PLANNED"})
+    String status
 ) {
+    /** Back-compat canonical shape without a status (defaults to PLANNED). */
+    public BookingRequest(UUID calendarId, ResourceData resource, SlotData slot) {
+        this(calendarId, resource, slot, null);
+    }
+
     /**
      * Validate the booking request
      */
@@ -33,5 +41,7 @@ public record BookingRequest(
         }
         resource.validate();
         slot.validate();
+        // Throws with the allowed values when the status is unknown
+        BookingStatus.parse(status);
     }
 }
