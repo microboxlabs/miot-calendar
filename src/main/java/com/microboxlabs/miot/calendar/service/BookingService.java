@@ -15,7 +15,9 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,13 +36,17 @@ public class BookingService {
     SlotService slotService;
 
     /**
-     * Get bookings by calendar and date range
+     * Get bookings by calendar, date range and (optionally) lifecycle status
      */
-    public List<Booking> getBookings(UUID calendarId, LocalDate startDate, LocalDate endDate) {
+    public List<Booking> getBookings(UUID calendarId, LocalDate startDate, LocalDate endDate, BookingStatus status) {
         if (calendarId != null) {
-            return Booking.findByCalendarAndDateRange(calendarId, startDate, endDate);
+            return status != null
+                ? Booking.findByCalendarDateRangeAndStatus(calendarId, startDate, endDate, status)
+                : Booking.findByCalendarAndDateRange(calendarId, startDate, endDate);
         }
-        return Booking.findByDateRange(startDate, endDate);
+        return status != null
+            ? Booking.findByDateRangeAndStatus(startDate, endDate, status)
+            : Booking.findByDateRange(startDate, endDate);
     }
 
     /**
@@ -243,6 +249,56 @@ public class BookingService {
             booking.id, booking.resourceId, booking.status);
 
         return booking;
+    }
+
+    /**
+     * Patch every booking of a resource, addressed by the resource's external
+     * id and optionally scoped to one calendar (CALSYNC C2).
+     *
+     * <p>{@code resourceDataPatch} is shallow-merged (top-level keys overwrite,
+     * absent keys are preserved). {@code rawStatus} follows the same
+     * forward-only transition rules as the UUID-keyed update — a regression on
+     * ANY matching booking fails the whole call so the operation stays
+     * all-or-nothing. Idempotent by construction: re-sending the same patch is
+     * a same-status no-op plus an identical merge.
+     */
+    @Transactional
+    public List<Booking> patchBookingsByResource(
+            String resourceId, UUID calendarId, Map<String, Object> resourceDataPatch, String rawStatus) {
+        List<Booking> bookings = calendarId != null
+            ? Booking.findByResourceIdAndCalendar(resourceId, calendarId)
+            : Booking.findByResourceId(resourceId);
+        if (bookings.isEmpty()) {
+            throw new IllegalArgumentException("Booking not found for resource: " + resourceId
+                + (calendarId != null ? " in calendar " + calendarId : ""));
+        }
+
+        BookingStatus targetStatus = BookingStatus.parse(rawStatus);
+        for (Booking booking : bookings) {
+            if (targetStatus != null && targetStatus != booking.status) {
+                if (!booking.status.canTransitionTo(targetStatus)) {
+                    throw new BookingValidationException(String.format(
+                        "Status regression: booking %s is %s, cannot go back to %s",
+                        booking.id, booking.status, targetStatus), "STATUS_REGRESSION");
+                }
+                booking.status = targetStatus;
+            }
+            if (resourceDataPatch != null && !resourceDataPatch.isEmpty()) {
+                Map<String, Object> merged = booking.resourceData == null
+                    ? new HashMap<>()
+                    : new HashMap<>(booking.resourceData);
+                merged.putAll(resourceDataPatch);
+                booking.resourceData = merged;
+            }
+            booking.persist();
+        }
+
+        LOG.infof("Patched %d booking(s) for resource %s (status %s, %d data key(s))",
+            bookings.size(), resourceId,
+            targetStatus != null ? targetStatus : "unchanged",
+            resourceDataPatch != null ? resourceDataPatch.size() : 0);
+
+        return bookings;
     }
 
     /**

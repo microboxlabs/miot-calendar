@@ -114,6 +114,15 @@ public class Booking extends PanacheEntityBase {
     }
 
     /**
+     * Find bookings by calendar, date range and lifecycle status
+     */
+    public static List<Booking> findByCalendarDateRangeAndStatus(
+            UUID calendarId, LocalDate startDate, LocalDate endDate, BookingStatus status) {
+        return list("calendar.id = ?1 and slotDate >= ?2 and slotDate <= ?3 and status = ?4 order by slotDate, slotHour, slotMinutes",
+                calendarId, startDate, endDate, status);
+    }
+
+    /**
      * Find bookings by date range (all calendars)
      */
     public static List<Booking> findByDateRange(LocalDate startDate, LocalDate endDate) {
@@ -122,10 +131,26 @@ public class Booking extends PanacheEntityBase {
     }
 
     /**
+     * Find bookings by date range and lifecycle status (all calendars)
+     */
+    public static List<Booking> findByDateRangeAndStatus(
+            LocalDate startDate, LocalDate endDate, BookingStatus status) {
+        return list("slotDate >= ?1 and slotDate <= ?2 and status = ?3 order by slotDate, slotHour, slotMinutes",
+                startDate, endDate, status);
+    }
+
+    /**
      * Find booking by resource ID
      */
     public static List<Booking> findByResourceId(String resourceId) {
         return list("resourceId", resourceId);
+    }
+
+    /**
+     * Find bookings by resource ID scoped to one calendar
+     */
+    public static List<Booking> findByResourceIdAndCalendar(String resourceId, UUID calendarId) {
+        return list("resourceId = ?1 and calendar.id = ?2", resourceId, calendarId);
     }
 
     /**
