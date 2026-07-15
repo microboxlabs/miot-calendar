@@ -18,6 +18,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,6 +32,8 @@ import java.util.UUID;
 public class BookingResource {
 
     private static final Logger LOG = Logger.getLogger(BookingResource.class);
+    /** Prefix of the service's not-found message, matched to map to a 404. */
+    private static final String BOOKING_NOT_FOUND = "Booking not found";
 
     @Inject
     BookingService bookingService;
@@ -42,17 +45,29 @@ public class BookingResource {
     public Response listBookings(
             @Parameter(description = "Filter bookings by calendar identifier", schema = @Schema(format = "uuid")) @QueryParam("calendarId") UUID calendarId,
             @Parameter(description = "Start date of the range (inclusive, defaults to today)", schema = @Schema(format = "date")) @QueryParam("startDate") LocalDate startDate,
-            @Parameter(description = "End date of the range (inclusive, defaults to start + 30 days)", schema = @Schema(format = "date")) @QueryParam("endDate") LocalDate endDate) {
+            @Parameter(description = "End date of the range (inclusive, defaults to start + 30 days)", schema = @Schema(format = "date")) @QueryParam("endDate") LocalDate endDate,
+            @Parameter(description = "Filter bookings by lifecycle status") @QueryParam("status") String status) {
 
-        // Default to today if no dates provided
+        // Default to today if no dates provided. systemDefault() is explicit
+        // (Sonar S8688) while preserving the prior no-arg behavior; callers
+        // normally pass an explicit range, so this default is a convenience.
         if (startDate == null) {
-            startDate = LocalDate.now();
+            startDate = LocalDate.now(ZoneId.systemDefault());
         }
         if (endDate == null) {
             endDate = startDate.plusDays(30);
         }
 
-        List<Booking> bookings = bookingService.getBookings(calendarId, startDate, endDate);
+        BookingStatus statusFilter;
+        try {
+            statusFilter = BookingStatus.parse(status);
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                .entity(ErrorResponse.badRequest(e.getMessage()))
+                .build();
+        }
+
+        List<Booking> bookings = bookingService.getBookings(calendarId, startDate, endDate, statusFilter);
         return Response.ok(BookingListResponse.from(bookings)).build();
     }
 
@@ -104,12 +119,14 @@ public class BookingResource {
     @PUT
     @Path("/{id}")
     @Transactional
-    @Operation(operationId = "updateBooking", summary = "Update booking resource data", description = "Update an existing booking's resource payload in place. The slot is not changed; use POST /bookings/{id}/move to move a booking (or update its payload as part of a move).")
+    @Operation(operationId = "updateBooking", summary = "Update booking resource data and/or status", description = "Update an existing booking in place: its resource payload, its lifecycle status, or both. The slot is not changed; use POST /bookings/{id}/move to move a booking (or update its payload as part of a move). Status moves are forward-only; the only way back to PLANNED is a move to a different slot.")
     @APIResponse(responseCode = "200", description = "Booking updated",
         content = @Content(schema = @Schema(implementation = BookingResponse.class)))
-    @APIResponse(responseCode = "400", description = "Invalid request (e.g. missing resource or resource id mismatch)",
+    @APIResponse(responseCode = "400", description = "Invalid request (e.g. empty body, unknown status, or resource id mismatch)",
         content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @APIResponse(responseCode = "404", description = "Booking not found",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "409", description = "Status regression rejected",
         content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     public Response updateBooking(
             @Parameter(description = "Unique identifier of the booking to update", required = true) @PathParam("id") UUID id,
@@ -119,10 +136,10 @@ public class BookingResource {
                 throw new IllegalArgumentException("Request body is required");
             }
             request.validate();
-            Booking booking = bookingService.updateBookingResource(id, request.resource());
+            Booking booking = bookingService.updateBookingResource(id, request.resource(), request.status());
             return Response.ok(BookingResponse.from(booking)).build();
         } catch (IllegalArgumentException e) {
-            if (e.getMessage() != null && e.getMessage().startsWith("Booking not found")) {
+            if (e.getMessage() != null && e.getMessage().startsWith(BOOKING_NOT_FOUND)) {
                 return Response.status(Response.Status.NOT_FOUND)
                     .entity(ErrorResponse.notFound(e.getMessage()))
                     .build();
@@ -130,6 +147,11 @@ public class BookingResource {
             LOG.warnf("Invalid booking update request: %s", e.getMessage());
             return Response.status(Response.Status.BAD_REQUEST)
                 .entity(ErrorResponse.badRequest(e.getMessage()))
+                .build();
+        } catch (BookingValidationException e) {
+            LOG.warnf("Booking status update rejected: %s (%s)", e.getMessage(), e.getErrorCode());
+            return Response.status(Response.Status.CONFLICT)
+                .entity(ErrorResponse.conflict(e.getMessage()))
                 .build();
         }
     }
@@ -160,7 +182,7 @@ public class BookingResource {
             Booking booking = bookingService.moveBooking(id, request);
             return Response.ok(BookingResponse.from(booking)).build();
         } catch (IllegalArgumentException e) {
-            if (e.getMessage() != null && e.getMessage().startsWith("Booking not found")) {
+            if (e.getMessage() != null && e.getMessage().startsWith(BOOKING_NOT_FOUND)) {
                 return Response.status(Response.Status.NOT_FOUND)
                     .entity(ErrorResponse.notFound(e.getMessage()))
                     .build();
@@ -205,5 +227,52 @@ public class BookingResource {
             @Parameter(description = "Identifier of the resource to get bookings for", required = true) @PathParam("resourceId") String resourceId) {
         List<Booking> bookings = bookingService.getBookingsByResourceId(resourceId);
         return Response.ok(BookingListResponse.from(bookings)).build();
+    }
+
+    @PATCH
+    @Path("/resource/{resourceId}")
+    @Transactional
+    @Operation(operationId = "patchBookingsByResource", summary = "Patch bookings by resource",
+        description = "Patch every booking of a resource, addressed by the resource's external id "
+            + "(optionally scoped to one calendar via calendarId). resourceData is shallow-merged "
+            + "(top-level keys overwrite, absent keys are preserved); status follows the same "
+            + "forward-only rules as PUT /bookings/{id}. Idempotent: re-sending the same patch "
+            + "returns 200 with the same end state.")
+    @APIResponse(responseCode = "200", description = "Patched bookings",
+        content = @Content(schema = @Schema(implementation = BookingListResponse.class)))
+    @APIResponse(responseCode = "400", description = "Invalid request (empty patch or unknown status)",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "404", description = "No booking matches the resource (and calendar scope)",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "409", description = "Status regression rejected",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public Response patchBookingsByResource(
+            @Parameter(description = "Identifier of the resource whose bookings to patch", required = true) @PathParam("resourceId") String resourceId,
+            @Parameter(description = "Restrict the patch to bookings in this calendar", schema = @Schema(format = "uuid")) @QueryParam("calendarId") UUID calendarId,
+            BookingResourcePatchRequest request) {
+        try {
+            if (request == null) {
+                throw new IllegalArgumentException("Request body is required");
+            }
+            request.validate();
+            List<Booking> bookings = bookingService.patchBookingsByResource(
+                resourceId, calendarId, request.resourceData(), request.status());
+            return Response.ok(BookingListResponse.from(bookings)).build();
+        } catch (IllegalArgumentException e) {
+            if (e.getMessage() != null && e.getMessage().startsWith(BOOKING_NOT_FOUND)) {
+                return Response.status(Response.Status.NOT_FOUND)
+                    .entity(ErrorResponse.notFound(e.getMessage()))
+                    .build();
+            }
+            LOG.warnf("Invalid booking resource patch: %s", e.getMessage());
+            return Response.status(Response.Status.BAD_REQUEST)
+                .entity(ErrorResponse.badRequest(e.getMessage()))
+                .build();
+        } catch (BookingValidationException e) {
+            LOG.warnf("Booking resource patch rejected: %s (%s)", e.getMessage(), e.getErrorCode());
+            return Response.status(Response.Status.CONFLICT)
+                .entity(ErrorResponse.conflict(e.getMessage()))
+                .build();
+        }
     }
 }

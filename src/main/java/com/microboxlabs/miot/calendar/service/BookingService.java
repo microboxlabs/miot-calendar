@@ -4,16 +4,20 @@ import com.microboxlabs.miot.calendar.entity.Booking;
 import com.microboxlabs.miot.calendar.entity.Calendar;
 import com.microboxlabs.miot.calendar.entity.Slot;
 import com.microboxlabs.miot.calendar.model.BookingRequest;
+import com.microboxlabs.miot.calendar.model.BookingStatus;
 import com.microboxlabs.miot.calendar.model.MoveBookingRequest;
 import com.microboxlabs.miot.calendar.model.ResourceData;
 import com.microboxlabs.miot.calendar.validation.BookingValidationService;
+import com.microboxlabs.miot.calendar.validation.BookingValidationService.BookingValidationException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -32,13 +36,17 @@ public class BookingService {
     SlotService slotService;
 
     /**
-     * Get bookings by calendar and date range
+     * Get bookings by calendar, date range and (optionally) lifecycle status
      */
-    public List<Booking> getBookings(UUID calendarId, LocalDate startDate, LocalDate endDate) {
+    public List<Booking> getBookings(UUID calendarId, LocalDate startDate, LocalDate endDate, BookingStatus status) {
         if (calendarId != null) {
-            return Booking.findByCalendarAndDateRange(calendarId, startDate, endDate);
+            return status != null
+                ? Booking.findByCalendarDateRangeAndStatus(calendarId, startDate, endDate, status)
+                : Booking.findByCalendarAndDateRange(calendarId, startDate, endDate);
         }
-        return Booking.findByDateRange(startDate, endDate);
+        return status != null
+            ? Booking.findByDateRangeAndStatus(startDate, endDate, status)
+            : Booking.findByDateRange(startDate, endDate);
     }
 
     /**
@@ -97,6 +105,8 @@ public class BookingService {
         booking.resourceType = request.resource().type();
         booking.resourceLabel = request.resource().label();
         booking.resourceData = request.resource().data();
+        BookingStatus initialStatus = BookingStatus.parse(request.status());
+        booking.status = initialStatus != null ? initialStatus : BookingStatus.PLANNED;
         booking.createdBy = createdBy;
 
         booking.persist();
@@ -166,6 +176,10 @@ public class BookingService {
             booking.slotDate = newSlot.slotDate;
             booking.slotHour = newSlot.slotHour;
             booking.slotMinutes = newSlot.slotMinutes;
+            // The documented status-regression exception: a re-plan to a new
+            // slot restarts the lifecycle. Same-slot payload refreshes keep
+            // the current status.
+            booking.status = BookingStatus.PLANNED;
         }
         if (newResource != null) {
             booking.resourceType = newResource.type();
@@ -187,35 +201,115 @@ public class BookingService {
     }
 
     /**
-     * Update an existing booking's resource payload in place.
+     * Update an existing booking in place: its resource payload, its
+     * lifecycle status, or both.
      *
-     * <p>Only {@code resourceType}, {@code resourceLabel} and {@code resourceData}
-     * change — the slot stays the same. The request's resource id must match the
-     * booking's current resource id; a booking cannot be repointed to a different
-     * resource (use cancel + create for that).
+     * <p>The slot stays the same. When a resource is given its id must match
+     * the booking's current resource id; a booking cannot be repointed to a
+     * different resource (use cancel + create for that). When a status is
+     * given it must be a forward transition (same-status is a no-op);
+     * regressions throw a {@link BookingValidationException} with code
+     * {@code STATUS_REGRESSION} — the only sanctioned way back to PLANNED is
+     * a move to a different slot (see {@link #moveBooking}).
      */
     @Transactional
-    public Booking updateBookingResource(UUID bookingId, ResourceData resource) {
+    public Booking updateBookingResource(UUID bookingId, ResourceData resource, String rawStatus) {
         Booking booking = Booking.findById(bookingId);
         if (booking == null) {
             throw new IllegalArgumentException("Booking not found: " + bookingId);
         }
 
-        resource.validate();
-        if (!resource.id().equals(booking.resourceId)) {
-            throw new IllegalArgumentException(String.format(
-                "Resource id mismatch: booking %s is for resource %s, cannot update to %s",
-                bookingId, booking.resourceId, resource.id()));
+        if (resource != null) {
+            resource.validate();
+            if (!resource.id().equals(booking.resourceId)) {
+                throw new IllegalArgumentException(String.format(
+                    "Resource id mismatch: booking %s is for resource %s, cannot update to %s",
+                    bookingId, booking.resourceId, resource.id()));
+            }
         }
 
-        booking.resourceType = resource.type();
-        booking.resourceLabel = resource.label();
-        booking.resourceData = resource.data();
+        BookingStatus targetStatus = BookingStatus.parse(rawStatus);
+        if (targetStatus != null && targetStatus != booking.status) {
+            if (!booking.status.canTransitionTo(targetStatus)) {
+                throw new BookingValidationException(String.format(
+                    "Status regression: booking %s is %s, cannot go back to %s",
+                    bookingId, booking.status, targetStatus), "STATUS_REGRESSION");
+            }
+            booking.status = targetStatus;
+        }
+
+        if (resource != null) {
+            booking.resourceType = resource.type();
+            booking.resourceLabel = resource.label();
+            booking.resourceData = resource.data();
+        }
         booking.persist();
 
-        LOG.infof("Updated booking %s resource data for resource %s", booking.id, booking.resourceId);
+        LOG.infof("Updated booking %s (resource %s, status %s)",
+            booking.id, booking.resourceId, booking.status);
 
         return booking;
+    }
+
+    /**
+     * Patch every booking of a resource, addressed by the resource's external
+     * id and optionally scoped to one calendar (CALSYNC C2).
+     *
+     * <p>{@code resourceDataPatch} is shallow-merged (top-level keys overwrite,
+     * absent keys are preserved). {@code rawStatus} follows the same
+     * forward-only transition rules as the UUID-keyed update — a regression on
+     * ANY matching booking fails the whole call so the operation stays
+     * all-or-nothing. Idempotent by construction: re-sending the same patch is
+     * a same-status no-op plus an identical merge.
+     */
+    @Transactional
+    public List<Booking> patchBookingsByResource(
+            String resourceId, UUID calendarId, Map<String, Object> resourceDataPatch, String rawStatus) {
+        List<Booking> bookings = calendarId != null
+            ? Booking.findByResourceIdAndCalendar(resourceId, calendarId)
+            : Booking.findByResourceId(resourceId);
+        if (bookings.isEmpty()) {
+            throw new IllegalArgumentException("Booking not found for resource: " + resourceId
+                + (calendarId != null ? " in calendar " + calendarId : ""));
+        }
+
+        BookingStatus targetStatus = BookingStatus.parse(rawStatus);
+        for (Booking booking : bookings) {
+            applyPatch(booking, targetStatus, resourceDataPatch);
+        }
+
+        LOG.infof("Patched %d booking(s) for resource %s (status %s, %d data key(s))",
+            bookings.size(), resourceId,
+            targetStatus != null ? targetStatus : "unchanged",
+            resourceDataPatch != null ? resourceDataPatch.size() : 0);
+
+        return bookings;
+    }
+
+    /**
+     * Apply one resource patch to a single booking: forward-only status move
+     * (regression throws {@code STATUS_REGRESSION}) and a shallow resource-data
+     * merge, then persist. Extracted from {@link #patchBookingsByResource} so
+     * the per-booking branching stays out of the loop.
+     */
+    private static void applyPatch(Booking booking, BookingStatus targetStatus,
+                                   Map<String, Object> resourceDataPatch) {
+        if (targetStatus != null && targetStatus != booking.status) {
+            if (!booking.status.canTransitionTo(targetStatus)) {
+                throw new BookingValidationException(String.format(
+                    "Status regression: booking %s is %s, cannot go back to %s",
+                    booking.id, booking.status, targetStatus), "STATUS_REGRESSION");
+            }
+            booking.status = targetStatus;
+        }
+        if (resourceDataPatch != null && !resourceDataPatch.isEmpty()) {
+            Map<String, Object> merged = booking.resourceData == null
+                ? new HashMap<>()
+                : new HashMap<>(booking.resourceData);
+            merged.putAll(resourceDataPatch);
+            booking.resourceData = merged;
+        }
+        booking.persist();
     }
 
     /**

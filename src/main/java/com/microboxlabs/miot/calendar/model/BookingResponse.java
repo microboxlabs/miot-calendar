@@ -23,11 +23,17 @@ public record BookingResponse(
     @Schema(required = true, description = "Slot date and time of the booking")
     SlotData slot,
 
+    @Schema(required = true, description = "Lifecycle status of the booking")
+    BookingStatus status,
+
     @Schema(required = true, description = "Timestamp when the booking was created", format = "date-time")
     ZonedDateTime createdAt,
 
     @Schema(description = "Identifier of the user who created the booking")
-    String createdBy
+    String createdBy,
+
+    @Schema(required = true, description = "Timestamp of the last change to the booking", format = "date-time")
+    ZonedDateTime updatedAt
 ) {
     /**
      * Create from entity
@@ -47,8 +53,10 @@ public record BookingResponse(
                 booking.slotHour,
                 booking.slotMinutes
             ),
+            booking.status,
             booking.createdAt,
-            booking.createdBy
+            booking.createdBy,
+            booking.updatedAt
         );
     }
 }
