@@ -1,5 +1,6 @@
 package com.microboxlabs.miot.calendar.entity;
 
+import com.microboxlabs.miot.calendar.model.BookingStatus;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -64,6 +65,11 @@ public class Booking extends PanacheEntityBase {
     @Column(name = "resource_data", columnDefinition = "jsonb")
     public Map<String, Object> resourceData;
 
+    // Lifecycle status, advanced forward by the workflow coordinator (CALSYNC)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    public BookingStatus status = BookingStatus.PLANNED;
+
     // Audit fields
     @Column(name = "created_at", nullable = false)
     public ZonedDateTime createdAt;
@@ -78,6 +84,9 @@ public class Booking extends PanacheEntityBase {
     public void prePersist() {
         if (createdAt == null) {
             createdAt = ZonedDateTime.now();
+        }
+        if (status == null) {
+            status = BookingStatus.PLANNED;
         }
         updatedAt = ZonedDateTime.now();
         
