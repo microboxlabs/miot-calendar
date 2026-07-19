@@ -287,6 +287,70 @@ public class BookingService {
     }
 
     /**
+     * Unassign every booking of a resource: reset the lifecycle to
+     * {@link BookingStatus#PLANNED} and drop {@code clearDataKeys} from
+     * {@code resource.data}, keeping the slot.
+     *
+     * <p>This is the second sanctioned status regression (see
+     * {@link BookingStatus#canUnassign()}), and it exists because the
+     * coordinator's workflow is not monotonic — a service can go back from
+     * {@code presentDriver} to {@code assignDriver}. Routing it through its own
+     * operation rather than relaxing
+     * {@link BookingStatus#canTransitionTo(BookingStatus)} keeps a plain status
+     * patch strictly forward-only.
+     *
+     * <p>Clearing the keys is not optional decoration: {@code resource.data}
+     * merges are shallow and preserve absent keys, so a booking reset to
+     * PLANNED without this would still render its old driver.
+     *
+     * <p>All-or-nothing, like {@link #patchBookingsByResource}: a booking past
+     * {@code ASSIGNED} throws {@code STATUS_REGRESSION} and fails the whole
+     * call, because a coordinator unassigning an in-transit service means the
+     * two systems have genuinely diverged.
+     */
+    @Transactional
+    public List<Booking> unassignBookingsByResource(
+            String resourceId, UUID calendarId, List<String> clearDataKeys) {
+        List<Booking> bookings = calendarId != null
+            ? Booking.findByResourceIdAndCalendar(resourceId, calendarId)
+            : Booking.findByResourceId(resourceId);
+        if (bookings.isEmpty()) {
+            throw new IllegalArgumentException("Booking not found for resource: " + resourceId
+                + (calendarId != null ? " in calendar " + calendarId : ""));
+        }
+
+        for (Booking booking : bookings) {
+            applyUnassign(booking, clearDataKeys);
+        }
+
+        LOG.infof("Unassigned %d booking(s) for resource %s (cleared %d data key(s))",
+            bookings.size(), resourceId, clearDataKeys == null ? 0 : clearDataKeys.size());
+
+        return bookings;
+    }
+
+    /**
+     * Reset one booking to PLANNED and strip the named resource-data keys.
+     * Extracted from {@link #unassignBookingsByResource} to keep the
+     * per-booking branching out of the loop, mirroring {@link #applyPatch}.
+     */
+    private static void applyUnassign(Booking booking, List<String> clearDataKeys) {
+        if (!booking.status.canUnassign()) {
+            throw new BookingValidationException(String.format(
+                "Status regression: booking %s is %s, cannot be unassigned back to %s",
+                booking.id, booking.status, BookingStatus.PLANNED), "STATUS_REGRESSION");
+        }
+        booking.status = BookingStatus.PLANNED;
+
+        if (clearDataKeys != null && !clearDataKeys.isEmpty() && booking.resourceData != null) {
+            Map<String, Object> remaining = new HashMap<>(booking.resourceData);
+            clearDataKeys.forEach(remaining::remove);
+            booking.resourceData = remaining;
+        }
+        booking.persist();
+    }
+
+    /**
      * Apply one resource patch to a single booking: forward-only status move
      * (regression throws {@code STATUS_REGRESSION}) and a shallow resource-data
      * merge, then persist. Extracted from {@link #patchBookingsByResource} so

@@ -275,4 +275,48 @@ public class BookingResource {
                 .build();
         }
     }
+
+    @POST
+    @Path("/resource/{resourceId}/unassign")
+    @Transactional
+    @Operation(operationId = "unassignBookingsByResource", summary = "Unassign bookings by resource",
+        description = "Reset every booking of a resource to PLANNED and remove the named top-level keys "
+            + "from resource.data, keeping the slot. This is a sanctioned status regression for the "
+            + "coordinator's presentDriver -> assignDriver revert; a plain status patch stays "
+            + "forward-only. Allowed from PLANNED (no-op) and ASSIGNED only — from IN_TRANSIT onward "
+            + "the booking has run ahead of the workflow and the call is rejected. Idempotent: "
+            + "re-sending returns 200 with the same end state.")
+    @APIResponse(responseCode = "200", description = "Unassigned bookings",
+        content = @Content(schema = @Schema(implementation = BookingListResponse.class)))
+    @APIResponse(responseCode = "404", description = "No booking matches the resource (and calendar scope)",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "409", description = "Booking is past ASSIGNED and cannot be unassigned",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public Response unassignBookingsByResource(
+            @Parameter(description = "Identifier of the resource whose bookings to unassign", required = true) @PathParam("resourceId") String resourceId,
+            @Parameter(description = "Restrict the unassign to bookings in this calendar", schema = @Schema(format = "uuid")) @QueryParam("calendarId") UUID calendarId,
+            BookingUnassignRequest request) {
+        try {
+            // An absent body is a valid "reset the lifecycle, touch no payload".
+            List<String> clearDataKeys = request == null ? List.of() : request.safeClearDataKeys();
+            List<Booking> bookings = bookingService.unassignBookingsByResource(
+                resourceId, calendarId, clearDataKeys);
+            return Response.ok(BookingListResponse.from(bookings)).build();
+        } catch (IllegalArgumentException e) {
+            if (e.getMessage() != null && e.getMessage().startsWith(BOOKING_NOT_FOUND)) {
+                return Response.status(Response.Status.NOT_FOUND)
+                    .entity(ErrorResponse.notFound(e.getMessage()))
+                    .build();
+            }
+            LOG.warnf("Invalid booking unassign: %s", e.getMessage());
+            return Response.status(Response.Status.BAD_REQUEST)
+                .entity(ErrorResponse.badRequest(e.getMessage()))
+                .build();
+        } catch (BookingValidationException e) {
+            LOG.warnf("Booking unassign rejected: %s (%s)", e.getMessage(), e.getErrorCode());
+            return Response.status(Response.Status.CONFLICT)
+                .entity(ErrorResponse.conflict(e.getMessage()))
+                .build();
+        }
+    }
 }
