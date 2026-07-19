@@ -8,10 +8,18 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
  * <p>The workflow coordinator (single writer) advances a booking forward
  * through {@code PLANNED → ASSIGNED → IN_TRANSIT → ARRIVED → FINISHED}.
  * {@code CANCELLED} is terminal and reachable from any other status (an
- * administrative annulment can even follow FINISHED). Regressions are
- * rejected, with one documented exception: a re-plan that moves the booking
- * to a different slot resets it to PLANNED (handled by the move operation,
- * not by a status update).
+ * administrative annulment can even follow FINISHED).
+ *
+ * <p>Regressions are rejected, with two documented exceptions — both carried
+ * by a dedicated <i>operation</i> rather than by a raw status update, so that
+ * a stray late patch can never walk a booking backward:
+ * <ul>
+ *   <li>a re-plan that moves the booking to a different slot resets it to
+ *       PLANNED (the move operation);</li>
+ *   <li>an unassign that drops the carrier/driver/truck while keeping the
+ *       slot resets it to PLANNED (the unassign operation, see
+ *       {@link #canUnassign()}).</li>
+ * </ul>
  */
 @Schema(description = "Lifecycle status of a booking, advanced by the workflow coordinator")
 public enum BookingStatus {
@@ -61,5 +69,26 @@ public enum BookingStatus {
             return true;
         }
         return to.rank > this.rank;
+    }
+
+    /**
+     * Whether an <b>unassign</b> may reset this booking to {@link #PLANNED} —
+     * the second sanctioned regression, alongside the re-plan move.
+     *
+     * <p>The coordinator's workflow is not monotonic: a service can go back
+     * from {@code presentDriver} to {@code assignDriver}, dropping its
+     * carrier/driver/truck while keeping its slot. That is an unassign, and it
+     * is the only reason a booking legitimately walks {@code ASSIGNED →
+     * PLANNED}.
+     *
+     * <p>Deliberately narrower than "any regression": from {@code PLANNED} it
+     * is an idempotent no-op, and from {@code ASSIGNED} it is the real reset.
+     * From {@code IN_TRANSIT} onward the truck is already moving, so a
+     * coordinator asking to unassign means the booking and the workflow have
+     * genuinely diverged — that stays a rejected {@code STATUS_REGRESSION}
+     * rather than being papered over.
+     */
+    public boolean canUnassign() {
+        return this == PLANNED || this == ASSIGNED;
     }
 }
