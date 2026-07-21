@@ -323,4 +323,76 @@ class BookingResourcePatchTest {
             .then()
             .statusCode(400);
     }
+
+    @Test
+    @Order(10)
+    void syncStatusPatchStampsDetailAndTimestampWithoutTouchingLifecycle() {
+        // A syncStatus-only patch is a valid body (no status/resourceData needed).
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                { "syncStatus": "PENDING" }
+                """)
+            .when()
+            .patch(BOOKINGS + "/resource/" + RESOURCE_ID + "?calendarId=" + calendarA)
+            .then()
+            .statusCode(200)
+            .body("data[0].syncStatus", equalTo("PENDING"))
+            .body("data[0].syncAt", org.hamcrest.CoreMatchers.notNullValue())
+            // The lifecycle status is untouched (FINISHED from the previous test).
+            .body("data[0].status", equalTo("FINISHED"));
+
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                { "syncStatus": "CONFIRMED", "syncDetail": "Alerce accepted (code=OK)" }
+                """)
+            .when()
+            .patch(BOOKINGS + "/resource/" + RESOURCE_ID + "?calendarId=" + calendarA)
+            .then()
+            .statusCode(200)
+            .body("data[0].syncStatus", equalTo("CONFIRMED"))
+            .body("data[0].syncDetail", equalTo("Alerce accepted (code=OK)"));
+    }
+
+    @Test
+    @Order(11)
+    void syncStatusHasNoForwardOnlyRule() {
+        // A re-assignment legitimately reopens the confirmation window:
+        // CONFIRMED -> PENDING must NOT be rejected as a regression.
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                { "syncStatus": "PENDING" }
+                """)
+            .when()
+            .patch(BOOKINGS + "/resource/" + RESOURCE_ID + "?calendarId=" + calendarA)
+            .then()
+            .statusCode(200)
+            .body("data[0].syncStatus", equalTo("PENDING"))
+            // The previous detail does not survive the transition.
+            .body("data[0].syncDetail", nullValue());
+    }
+
+    @Test
+    @Order(12)
+    void unknownSyncStatusIs400AndUntouchedBookingsReadNull() {
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                { "syncStatus": "MAYBE" }
+                """)
+            .when()
+            .patch(BOOKINGS + "/resource/" + RESOURCE_ID)
+            .then()
+            .statusCode(400);
+
+        // The calendar-B sibling has never been sync-patched: null = untracked.
+        given()
+            .when()
+            .get(BOOKINGS + "?calendarId=" + calendarB + "&startDate=" + slotDate + "&endDate=" + slotDate)
+            .then()
+            .statusCode(200)
+            .body("data[0].syncStatus", nullValue());
+    }
 }

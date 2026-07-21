@@ -5,6 +5,7 @@ import com.microboxlabs.miot.calendar.entity.Calendar;
 import com.microboxlabs.miot.calendar.entity.Slot;
 import com.microboxlabs.miot.calendar.model.BookingRequest;
 import com.microboxlabs.miot.calendar.model.BookingStatus;
+import com.microboxlabs.miot.calendar.model.BookingSyncStatus;
 import com.microboxlabs.miot.calendar.model.MoveBookingRequest;
 import com.microboxlabs.miot.calendar.model.ResourceData;
 import com.microboxlabs.miot.calendar.validation.BookingValidationService;
@@ -15,6 +16,8 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -265,6 +268,20 @@ public class BookingService {
     @Transactional
     public List<Booking> patchBookingsByResource(
             String resourceId, UUID calendarId, Map<String, Object> resourceDataPatch, String rawStatus) {
+        return patchBookingsByResource(resourceId, calendarId, resourceDataPatch, rawStatus, null, null);
+    }
+
+    /**
+     * Variant carrying the TMS-confirmation patch: {@code rawSyncStatus}
+     * (PENDING/CONFIRMED/REJECTED) plus its optional detail. No transition
+     * rules — the coordinator's chained jobs are the single writer and the
+     * async-job ledger's chain gate is the sequencing authority; setting it
+     * stamps {@code syncAt}.
+     */
+    @Transactional
+    public List<Booking> patchBookingsByResource(
+            String resourceId, UUID calendarId, Map<String, Object> resourceDataPatch, String rawStatus,
+            String rawSyncStatus, String syncDetail) {
         List<Booking> bookings = calendarId != null
             ? Booking.findByResourceIdAndCalendar(resourceId, calendarId)
             : Booking.findByResourceId(resourceId);
@@ -274,13 +291,15 @@ public class BookingService {
         }
 
         BookingStatus targetStatus = BookingStatus.parse(rawStatus);
+        BookingSyncStatus targetSyncStatus = BookingSyncStatus.parse(rawSyncStatus);
         for (Booking booking : bookings) {
-            applyPatch(booking, targetStatus, resourceDataPatch);
+            applyPatch(booking, targetStatus, resourceDataPatch, targetSyncStatus, syncDetail);
         }
 
-        LOG.infof("Patched %d booking(s) for resource %s (status %s, %d data key(s))",
+        LOG.infof("Patched %d booking(s) for resource %s (status %s, syncStatus %s, %d data key(s))",
             bookings.size(), resourceId,
             targetStatus != null ? targetStatus : "unchanged",
+            targetSyncStatus != null ? targetSyncStatus : "unchanged",
             resourceDataPatch != null ? resourceDataPatch.size() : 0);
 
         return bookings;
@@ -352,12 +371,14 @@ public class BookingService {
 
     /**
      * Apply one resource patch to a single booking: forward-only status move
-     * (regression throws {@code STATUS_REGRESSION}) and a shallow resource-data
-     * merge, then persist. Extracted from {@link #patchBookingsByResource} so
-     * the per-booking branching stays out of the loop.
+     * (regression throws {@code STATUS_REGRESSION}), a shallow resource-data
+     * merge and the free-form TMS sync stamp, then persist. Extracted from
+     * {@link #patchBookingsByResource} so the per-booking branching stays out
+     * of the loop.
      */
     private static void applyPatch(Booking booking, BookingStatus targetStatus,
-                                   Map<String, Object> resourceDataPatch) {
+                                   Map<String, Object> resourceDataPatch,
+                                   BookingSyncStatus targetSyncStatus, String syncDetail) {
         if (targetStatus != null && targetStatus != booking.status) {
             if (!booking.status.canTransitionTo(targetStatus)) {
                 throw new BookingValidationException(String.format(
@@ -372,6 +393,11 @@ public class BookingService {
                 : new HashMap<>(booking.resourceData);
             merged.putAll(resourceDataPatch);
             booking.resourceData = merged;
+        }
+        if (targetSyncStatus != null) {
+            booking.syncStatus = targetSyncStatus;
+            booking.syncDetail = syncDetail;
+            booking.syncAt = ZonedDateTime.now(ZoneOffset.UTC);
         }
         booking.persist();
     }
