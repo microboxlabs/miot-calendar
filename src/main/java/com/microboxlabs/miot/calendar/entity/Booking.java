@@ -1,6 +1,7 @@
 package com.microboxlabs.miot.calendar.entity;
 
 import com.microboxlabs.miot.calendar.model.BookingStatus;
+import com.microboxlabs.miot.calendar.model.BookingSyncStatus;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -70,6 +71,21 @@ public class Booking extends PanacheEntityBase {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     public BookingStatus status = BookingStatus.PLANNED;
+
+    // Synchronization state of the booking's current data with an external
+    // downstream system — orthogonal to the lifecycle status; null =
+    // untracked. Written by the integration layer that mirrors bookings
+    // outward (PENDING when a sync is dispatched, CONFIRMED/REJECTED once
+    // the external system acknowledges).
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sync_status", length = 20)
+    public BookingSyncStatus syncStatus;
+
+    @Column(name = "sync_detail", length = 500)
+    public String syncDetail;
+
+    @Column(name = "sync_at")
+    public ZonedDateTime syncAt;
 
     // Audit fields
     @Column(name = "created_at", nullable = false)

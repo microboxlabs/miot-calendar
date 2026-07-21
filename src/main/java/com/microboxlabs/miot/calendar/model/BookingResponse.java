@@ -26,6 +26,15 @@ public record BookingResponse(
     @Schema(required = true, description = "Lifecycle status of the booking")
     BookingStatus status,
 
+    @Schema(description = "External-system acknowledgement of the booking's current data (null = untracked)")
+    BookingSyncStatus syncStatus,
+
+    @Schema(description = "External-system acknowledgement/rejection detail")
+    String syncDetail,
+
+    @Schema(description = "Timestamp of the last syncStatus transition", format = "date-time")
+    ZonedDateTime syncAt,
+
     @Schema(required = true, description = "Timestamp when the booking was created", format = "date-time")
     ZonedDateTime createdAt,
 
@@ -54,6 +63,9 @@ public record BookingResponse(
                 booking.slotMinutes
             ),
             booking.status,
+            booking.syncStatus,
+            booking.syncDetail,
+            booking.syncAt,
             booking.createdAt,
             booking.createdBy,
             booking.updatedAt

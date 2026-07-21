@@ -256,7 +256,8 @@ public class BookingResource {
             }
             request.validate();
             List<Booking> bookings = bookingService.patchBookingsByResource(
-                resourceId, calendarId, request.resourceData(), request.status());
+                resourceId, calendarId, request.resourceData(), request.status(),
+                request.syncStatus(), request.syncDetail());
             return Response.ok(BookingListResponse.from(bookings)).build();
         } catch (IllegalArgumentException e) {
             if (e.getMessage() != null && e.getMessage().startsWith(BOOKING_NOT_FOUND)) {
