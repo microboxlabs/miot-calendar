@@ -69,21 +69,20 @@ public class CalendarResource {
     @Operation(operationId = "getDefaultCalendar", summary = "Get the default calendar for an origin",
         description = "Resolve the calendar an integrating system should book into when it was given none. "
             + "Matches the active default whose filter names this origin, falling back to the default with no "
-            + "origin filter. A 404 is a meaningful answer — no calendar is configured to receive these "
-            + "bookings, so none should be created.")
+            + "origin filter. Answers 204 when there is none: nothing is configured to receive those bookings, "
+            + "so none should be created. Deliberately NOT a 404 — a client must be able to tell that answer "
+            + "apart from talking to a server that has no such endpoint, which is a failure to fall back from "
+            + "rather than a decision to act on.")
     @APIResponse(responseCode = "200", description = "Default calendar for the origin",
         content = @Content(schema = @Schema(implementation = CalendarResponse.class)))
-    @APIResponse(responseCode = "404", description = "No default calendar for this origin",
-        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @APIResponse(responseCode = "204", description = "No default calendar for this origin")
     public Response getDefaultCalendar(
             @Parameter(description = "Origin the booking belongs to, matched against the calendar filter's origin")
             @QueryParam("origin") String origin) {
         Calendar calendar = calendarService.getDefaultCalendarForOrigin(origin);
         if (calendar == null) {
-            return Response.status(Response.Status.NOT_FOUND)
-                .entity(ErrorResponse.notFound(
-                    "No default calendar configured for origin: " + (origin == null ? "" : origin)))
-                .build();
+            LOG.debugf("No default calendar configured for origin: %s", origin);
+            return Response.noContent().build();
         }
         return Response.ok(CalendarResponse.from(calendar, hasSlotManager(calendar.id))).build();
     }

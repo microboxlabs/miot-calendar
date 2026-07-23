@@ -478,7 +478,7 @@ class CalendarResourceTest {
             .when()
             .get("/api/v1/miot-calendar/calendars/default")
             .then()
-            .statusCode(404);
+            .statusCode(204);
     }
 
     @Test
@@ -490,7 +490,7 @@ class CalendarResourceTest {
             .when()
             .get("/api/v1/miot-calendar/calendars/default")
             .then()
-            .statusCode(404);
+            .statusCode(204);
     }
 
     @Test
