@@ -78,6 +78,15 @@ public class CalendarService {
     }
 
     /**
+     * The calendar an integrating system should book into for this origin when
+     * it was given none. Null when nothing is configured to receive them.
+     */
+    @Transactional
+    public Calendar getDefaultCalendarForOrigin(String origin) {
+        return Calendar.findDefaultForOrigin(origin);
+    }
+
+    /**
      * Get calendar by code
      */
     public Optional<Calendar> getCalendarByCode(String code) {
@@ -104,6 +113,10 @@ public class CalendarService {
         calendar.active = request.active() != null ? request.active() : true;
         calendar.parallelism = request.parallelism() != null ? request.parallelism() : 1;
         calendar.filter = sanitizeFilter(request.filter());
+        calendar.isDefault = false;
+        if (Boolean.TRUE.equals(request.isDefault())) {
+            claimDefault(calendar);
+        }
 
         calendar.persist();
 
@@ -155,6 +168,10 @@ public class CalendarService {
         if (request.filter() != null) {
             calendar.filter = sanitizeFilter(request.filter());
         }
+
+        // After the filter, which is what a default is scoped by: re-editing
+        // the origin of a calendar that already holds the flag moves its claim.
+        applyDefaultFlag(calendar, request.isDefault());
 
         if (parallelismChanged) {
             reprocessSlotsForParallelismChange(id);
@@ -228,6 +245,43 @@ public class CalendarService {
         // Step 2: Delete the calendar (JPA cascade deletes TimeWindows; DB cascade deletes SlotManager+Runs+GroupMembers)
         calendar.delete();
         LOG.infof("Hard deleted calendar: %s (%s)", calendar.name, calendar.code);
+    }
+
+    /**
+     * A default is a radio button, not a checkbox: one calendar per origin. The
+     * caller states an intent and the previous holder is demoted for them —
+     * refusing instead would make every reassignment a two-step dance through
+     * a calendar nobody is trying to edit.
+     */
+    private void applyDefaultFlag(Calendar calendar, Boolean requested) {
+        boolean wanted = requested != null ? requested : Boolean.TRUE.equals(calendar.isDefault);
+        calendar.isDefault = false;
+        if (wanted) {
+            claimDefault(calendar);
+        }
+    }
+
+    /**
+     * Take the default flag for this calendar's origin, demoting whoever holds
+     * it. The demotions are flushed before the claim lands because
+     * {@code uq_cld_calendars_default_per_origin} is checked per statement, and
+     * Hibernate would otherwise be free to write the new holder first.
+     */
+    private void claimDefault(Calendar calendar) {
+        String key = Calendar.defaultOriginKey(calendar.filter);
+        for (Calendar holder : Calendar.findDefaults()) {
+            if (holder.id != null && holder.id.equals(calendar.id)) {
+                continue;
+            }
+            if (!Calendar.defaultOriginKey(holder.filter).equals(key)) {
+                continue;
+            }
+            holder.isDefault = false;
+            LOG.infof("Demoted calendar %s (%s) as default for origin '%s'",
+                holder.name, holder.code, key);
+        }
+        Calendar.flush();
+        calendar.isDefault = true;
     }
 
     /**

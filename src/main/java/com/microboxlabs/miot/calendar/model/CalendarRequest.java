@@ -1,5 +1,6 @@
 package com.microboxlabs.miot.calendar.model;
 
+import com.microboxlabs.miot.calendar.entity.Calendar;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.util.List;
@@ -39,9 +40,15 @@ public record CalendarRequest(
     Map<String, String> filter,
 
     @Schema(description = "Whether to auto-provision a default SlotManager on creation. Defaults to true when null.", defaultValue = "true")
-    Boolean autoSlotManager
+    Boolean autoSlotManager,
+
+    @Schema(description = "Mark this calendar as the default for its filter origin — the calendar an integrating " +
+        "system books into when it was given none. Setting it demotes the previous default for the same origin. " +
+        "null = no change.", defaultValue = "false")
+    Boolean isDefault
 ) {
-    public static final Set<String> ALLOWED_FILTER_KEYS = Set.of("origin", "destination");
+    public static final Set<String> ALLOWED_FILTER_KEYS =
+        Set.of(Calendar.FILTER_KEY_ORIGIN, "destination");
 
     /**
      * Validate the calendar request

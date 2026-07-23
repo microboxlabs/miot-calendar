@@ -367,4 +367,135 @@ class CalendarResourceTest {
             .body("filter.origin", equalTo("ANF"))
             .body("filter.destination", nullValue());
     }
+
+    /** Create a calendar, returning its id. Origin may be null for no filter. */
+    private String createCalendar(String code, String origin, boolean isDefault) {
+        String filter = origin == null ? "null" : "{\"origin\": \"" + origin + "\"}";
+        return given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "code": "%s",
+                    "name": "%s",
+                    "timezone": "UTC",
+                    "filter": %s,
+                    "isDefault": %s
+                }
+                """.formatted(code, code, filter, isDefault))
+            .when()
+            .post("/api/v1/miot-calendar/calendars")
+            .then()
+            .statusCode(201)
+            .body("isDefault", equalTo(isDefault))
+            .extract()
+            .path("id");
+    }
+
+    private static void assertDefaultFlag(String id, boolean expected) {
+        given()
+            .when()
+            .get("/api/v1/miot-calendar/calendars/" + id)
+            .then()
+            .statusCode(200)
+            .body("isDefault", equalTo(expected));
+    }
+
+    @Test
+    void testDefaultCalendarIsResolvedByOrigin() {
+        String id = createCalendar("default-por", "POR", true);
+
+        given()
+            .queryParam("origin", "POR")
+            .when()
+            .get("/api/v1/miot-calendar/calendars/default")
+            .then()
+            .statusCode(200)
+            .body("id", equalTo(id))
+            .body("isDefault", equalTo(true));
+    }
+
+    @Test
+    void testMarkingANewDefaultDemotesThePreviousOne() {
+        // One per origin: the flag is a radio button, and the caller states an
+        // intent rather than having to demote the incumbent first.
+        String first = createCalendar("default-dem-1", "DEM", true);
+        String second = createCalendar("default-dem-2", "DEM", true);
+
+        assertDefaultFlag(first, false);
+        assertDefaultFlag(second, true);
+
+        given()
+            .queryParam("origin", "DEM")
+            .when()
+            .get("/api/v1/miot-calendar/calendars/default")
+            .then()
+            .statusCode(200)
+            .body("id", equalTo(second));
+    }
+
+    @Test
+    void testDefaultsForDifferentOriginsCoexist() {
+        String one = createCalendar("default-coex-1", "CXA", true);
+        String two = createCalendar("default-coex-2", "CXB", true);
+
+        assertDefaultFlag(one, true);
+        assertDefaultFlag(two, true);
+    }
+
+    @Test
+    void testUpdatePromotesAndDemotes() {
+        String incumbent = createCalendar("default-upd-1", "UPD", true);
+        String challenger = createCalendar("default-upd-2", "UPD", false);
+
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {"isDefault": true}
+                """)
+            .when()
+            .put("/api/v1/miot-calendar/calendars/" + challenger)
+            .then()
+            .statusCode(200)
+            .body("isDefault", equalTo(true));
+
+        assertDefaultFlag(incumbent, false);
+
+        // And clearing it leaves the origin with no default at all, rather than
+        // silently handing the flag back.
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {"isDefault": false}
+                """)
+            .when()
+            .put("/api/v1/miot-calendar/calendars/" + challenger)
+            .then()
+            .statusCode(200)
+            .body("isDefault", equalTo(false));
+
+        given()
+            .queryParam("origin", "UPD")
+            .when()
+            .get("/api/v1/miot-calendar/calendars/default")
+            .then()
+            .statusCode(404);
+    }
+
+    @Test
+    void testUnconfiguredOriginHasNoDefault() {
+        // A 404 is the answer, not a failure: nothing is configured to receive
+        // these bookings, so an integrator should create none.
+        given()
+            .queryParam("origin", "NOPE-" + System.nanoTime())
+            .when()
+            .get("/api/v1/miot-calendar/calendars/default")
+            .then()
+            .statusCode(404);
+    }
+
+    @Test
+    void testCalendarsAreNotDefaultUnlessAsked() {
+        String id = createCalendar("default-implicit", "IMP", false);
+        assertDefaultFlag(id, false);
+    }
 }

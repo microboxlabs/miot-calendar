@@ -49,7 +49,11 @@ public record CalendarResponse(
     Map<String, String> filter,
 
     @Schema(description = "Whether this calendar has a SlotManager provisioned")
-    Boolean hasSlotManager
+    Boolean hasSlotManager,
+
+    @Schema(required = true, description = "Whether this is the default calendar for its filter origin — the one " +
+        "an integrating system books into when it was given no calendar")
+    Boolean isDefault
 ) {
     /**
      * Create from entity
@@ -70,7 +74,8 @@ public record CalendarResponse(
             calendar.updatedAt,
             groupResponses,
             calendar.filter,
-            hasSlotManager
+            hasSlotManager,
+            Boolean.TRUE.equals(calendar.isDefault)
         );
     }
 }

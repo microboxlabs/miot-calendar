@@ -22,6 +22,9 @@ import java.util.UUID;
 })
 public class Calendar extends PanacheEntityBase {
 
+    /** Filter key naming the origin a calendar serves; scopes {@link #isDefault}. */
+    public static final String FILTER_KEY_ORIGIN = "origin";
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id")
@@ -48,6 +51,14 @@ public class Calendar extends PanacheEntityBase {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "filter", columnDefinition = "jsonb")
     public Map<String, String> filter;
+
+    /**
+     * Whether this is the calendar to use when an integrating system must place
+     * a booking but was given no calendar to place it in. Scoped by
+     * {@link #filter}'s {@code origin} — see {@link #findDefaultForOrigin}.
+     */
+    @Column(name = "is_default", nullable = false)
+    public Boolean isDefault = false;
 
     @Column(name = "created_at", nullable = false)
     public ZonedDateTime createdAt;
@@ -100,6 +111,47 @@ public class Calendar extends PanacheEntityBase {
      */
     public static Calendar findById(UUID id) {
         return find("id", id).firstResult();
+    }
+
+    /** The key a default calendar answers for: its filter origin, or "" for none. */
+    public static String defaultOriginKey(Map<String, String> filter) {
+        if (filter == null) {
+            return "";
+        }
+        String origin = filter.get(FILTER_KEY_ORIGIN);
+        return origin == null ? "" : origin.trim();
+    }
+
+    /** All calendars flagged default, active or not. */
+    public static List<Calendar> findDefaults() {
+        return list("isDefault", true);
+    }
+
+    /**
+     * The active default calendar for an origin: the one whose filter names
+     * that origin, else the one with no origin filter, which answers for
+     * everything not claimed specifically. Null when neither exists — a
+     * meaningful answer, not a lookup failure: the caller has nowhere to book.
+     *
+     * <p>Matched in Java rather than SQL because the origin lives inside a
+     * JSONB column and the candidate set is one row per origin.
+     */
+    public static Calendar findDefaultForOrigin(String origin) {
+        String wanted = origin == null ? "" : origin.trim();
+        Calendar fallback = null;
+        for (Calendar candidate : findDefaults()) {
+            if (!Boolean.TRUE.equals(candidate.active)) {
+                continue;
+            }
+            String key = defaultOriginKey(candidate.filter);
+            if (!wanted.isEmpty() && key.equals(wanted)) {
+                return candidate;
+            }
+            if (key.isEmpty()) {
+                fallback = candidate;
+            }
+        }
+        return fallback;
     }
 
     /**
