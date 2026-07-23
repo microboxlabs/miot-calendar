@@ -270,10 +270,8 @@ public class CalendarService {
     private void claimDefault(Calendar calendar) {
         String key = Calendar.defaultOriginKey(calendar.filter);
         for (Calendar holder : Calendar.findDefaults()) {
-            if (holder.id != null && holder.id.equals(calendar.id)) {
-                continue;
-            }
-            if (!Calendar.defaultOriginKey(holder.filter).equals(key)) {
+            boolean isSelf = holder.id != null && holder.id.equals(calendar.id);
+            if (isSelf || !Calendar.defaultOriginKey(holder.filter).equals(key)) {
                 continue;
             }
             holder.isDefault = false;
