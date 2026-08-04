@@ -44,10 +44,10 @@ public class BookingResource {
         content = @Content(schema = @Schema(implementation = BookingListResponse.class)))
     public Response listBookings(
             @Parameter(description = "Filter bookings by calendar identifier", schema = @Schema(format = "uuid")) @QueryParam("calendarId") UUID calendarId,
-            @Parameter(description = "Start date of the range (inclusive, defaults to today)", schema = @Schema(format = "date")) @QueryParam("startDate") LocalDate startDate,
-            @Parameter(description = "End date of the range (inclusive, defaults to start + 30 days)", schema = @Schema(format = "date")) @QueryParam("endDate") LocalDate endDate,
+            @Parameter(description = "Start date of the range (inclusive; defaults to today when resourceIdContains is absent)", schema = @Schema(format = "date")) @QueryParam("startDate") LocalDate startDate,
+            @Parameter(description = "End date of the range (inclusive; defaults to start + 30 days when startDate is supplied, and remains unbounded for date-less resource searches)", schema = @Schema(format = "date")) @QueryParam("endDate") LocalDate endDate,
             @Parameter(description = "Filter bookings by lifecycle status") @QueryParam("status") String status,
-            @Parameter(description = "Case-insensitive substring to match against the generic resource identifier") @QueryParam("resourceIdContains") String resourceIdContains) {
+            @Parameter(description = "Case-insensitive substring to match against the generic resource identifier; returns at most 100 bookings") @QueryParam("resourceIdContains") String resourceIdContains) {
 
         boolean resourceSearch = resourceIdContains != null && !resourceIdContains.isBlank();
         if (resourceSearch) {

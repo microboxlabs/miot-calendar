@@ -41,6 +41,7 @@ public class BookingService {
     /**
      * Get bookings by generic booking attributes.
      */
+    @Transactional
     public List<Booking> getBookings(
             UUID calendarId,
             LocalDate startDate,

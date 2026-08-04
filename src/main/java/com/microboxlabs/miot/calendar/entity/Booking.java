@@ -32,6 +32,8 @@ import java.util.UUID;
 })
 public class Booking extends PanacheEntityBase {
 
+    static final int RESOURCE_SEARCH_MAX_RESULTS = 100;
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id")
@@ -163,7 +165,9 @@ public class Booking extends PanacheEntityBase {
         }
         String predicates = String.join(" and ", conditions);
         return find(
-            predicates + " order by slotDate, slotHour, slotMinutes", parameters).list();
+            predicates + " order by slotDate, slotHour, slotMinutes", parameters)
+            .range(0, RESOURCE_SEARCH_MAX_RESULTS - 1)
+            .list();
     }
 
     private static String escapeLikePattern(String value) {
