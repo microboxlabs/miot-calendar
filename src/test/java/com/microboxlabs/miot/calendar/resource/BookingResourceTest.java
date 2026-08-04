@@ -33,10 +33,12 @@ class BookingResourceTest {
     URL bookingsUrl;
 
     private static final String RESOURCE_ID = "SRV-001";
+    private static final String HISTORICAL_RESOURCE_ID = "ARCHIVE_1584908-V";
 
     private String calendarId;
     private String bookingId;
     private LocalDate slotDate;
+    private LocalDate historicalSlotDate;
     private int slotHour = 10;
     private int slotMinutes = 0;
     private boolean setupDone = false;
@@ -52,6 +54,7 @@ class BookingResourceTest {
         if (setupDone) return;
         setupDone = true;
         slotDate = LocalDate.now().plusDays(1);
+        historicalSlotDate = LocalDate.now().minusDays(90);
 
         // Create a calendar with parallelism=2 (2 resources per slot)
         calendarId = given()
@@ -83,7 +86,7 @@ class BookingResourceTest {
                     "daysOfWeek": "1,2,3,4,5,6,7",
                     "validFrom": "%s"
                 }
-                """, LocalDate.now().toString()))
+                """, historicalSlotDate))
             .when()
             .post("/api/v1/miot-calendar/calendars/" + calendarId + "/time-windows")
             .then()
@@ -103,6 +106,44 @@ class BookingResourceTest {
             .post("/api/v1/miot-calendar/slots/generate")
             .then()
             .statusCode(200);
+
+        // Generate and book a slot outside the endpoint's default 30-day
+        // window. Resource searches without dates must still find it.
+        given()
+            .contentType(ContentType.JSON)
+            .body(String.format("""
+                {
+                    "calendarId": "%s",
+                    "startDate": "%s",
+                    "endDate": "%s"
+                }
+                """, calendarId, historicalSlotDate, historicalSlotDate))
+            .when()
+            .post("/api/v1/miot-calendar/slots/generate")
+            .then()
+            .statusCode(200);
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(String.format("""
+                {
+                    "calendarId": "%s",
+                    "resource": {
+                        "id": "%s",
+                        "type": "GENERIC",
+                        "label": "Historical resource"
+                    },
+                    "slot": {
+                        "date": "%s",
+                        "hour": 9,
+                        "minutes": 0
+                    }
+                }
+                """, calendarId, HISTORICAL_RESOURCE_ID, historicalSlotDate))
+            .when()
+            .post(bookingsUrl.toString())
+            .then()
+            .statusCode(201);
     }
 
     @Test
@@ -156,6 +197,27 @@ class BookingResourceTest {
             .statusCode(200)
             .body("data.size()", greaterThan(0))
             .body("data[0].resource.id", equalTo(RESOURCE_ID));
+    }
+
+    @Test
+    @Order(2)
+    void resourceIdSearchWithoutDatesIncludesHistoricalBookings() {
+        given()
+            .when()
+            .get(bookingsUrl.toString())
+            .then()
+            .statusCode(200)
+            .body("data.resource.id", not(hasItem(HISTORICAL_RESOURCE_ID)));
+
+        given()
+            .queryParam("resourceIdContains", "archive_1584908")
+            .when()
+            .get(bookingsUrl.toString())
+            .then()
+            .statusCode(200)
+            .body("total", equalTo(1))
+            .body("data[0].resource.id", equalTo(HISTORICAL_RESOURCE_ID))
+            .body("data[0].slot.date", equalTo(historicalSlotDate.toString()));
     }
 
     @Test

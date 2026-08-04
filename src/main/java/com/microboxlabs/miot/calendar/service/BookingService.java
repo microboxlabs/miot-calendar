@@ -39,9 +39,19 @@ public class BookingService {
     SlotService slotService;
 
     /**
-     * Get bookings by calendar, date range and (optionally) lifecycle status
+     * Get bookings by generic booking attributes.
      */
-    public List<Booking> getBookings(UUID calendarId, LocalDate startDate, LocalDate endDate, BookingStatus status) {
+    @Transactional
+    public List<Booking> getBookings(
+            UUID calendarId,
+            LocalDate startDate,
+            LocalDate endDate,
+            BookingStatus status,
+            String resourceIdContains) {
+        if (resourceIdContains != null && !resourceIdContains.isBlank()) {
+            return Booking.findByResourceIdContaining(
+                calendarId, startDate, endDate, status, resourceIdContains);
+        }
         if (calendarId != null) {
             return status != null
                 ? Booking.findByCalendarDateRangeAndStatus(calendarId, startDate, endDate, status)

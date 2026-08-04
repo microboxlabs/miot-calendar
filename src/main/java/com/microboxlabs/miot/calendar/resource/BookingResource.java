@@ -39,23 +39,31 @@ public class BookingResource {
     BookingService bookingService;
 
     @GET
-    @Operation(operationId = "listBookings", summary = "List bookings", description = "Retrieve bookings filtered by calendar and date range. Defaults to the next 30 days if no dates are provided.")
+    @Operation(operationId = "listBookings", summary = "List bookings", description = "Retrieve bookings filtered by calendar, date range, lifecycle status, and resource identifier. Date-less resource searches span all booking dates; other date-less searches default to the next 30 days.")
     @APIResponse(responseCode = "200", description = "List of bookings",
         content = @Content(schema = @Schema(implementation = BookingListResponse.class)))
     public Response listBookings(
             @Parameter(description = "Filter bookings by calendar identifier", schema = @Schema(format = "uuid")) @QueryParam("calendarId") UUID calendarId,
-            @Parameter(description = "Start date of the range (inclusive, defaults to today)", schema = @Schema(format = "date")) @QueryParam("startDate") LocalDate startDate,
-            @Parameter(description = "End date of the range (inclusive, defaults to start + 30 days)", schema = @Schema(format = "date")) @QueryParam("endDate") LocalDate endDate,
-            @Parameter(description = "Filter bookings by lifecycle status") @QueryParam("status") String status) {
+            @Parameter(description = "Start date of the range (inclusive; defaults to today when resourceIdContains is absent)", schema = @Schema(format = "date")) @QueryParam("startDate") LocalDate startDate,
+            @Parameter(description = "End date of the range (inclusive; defaults to start + 30 days when startDate is supplied, and remains unbounded for date-less resource searches)", schema = @Schema(format = "date")) @QueryParam("endDate") LocalDate endDate,
+            @Parameter(description = "Filter bookings by lifecycle status") @QueryParam("status") String status,
+            @Parameter(description = "Case-insensitive substring to match against the generic resource identifier; returns at most 100 bookings") @QueryParam("resourceIdContains") String resourceIdContains) {
 
-        // Default to today if no dates provided. systemDefault() is explicit
-        // (Sonar S8688) while preserving the prior no-arg behavior; callers
-        // normally pass an explicit range, so this default is a convenience.
-        if (startDate == null) {
-            startDate = LocalDate.now(ZoneId.systemDefault());
-        }
-        if (endDate == null) {
-            endDate = startDate.plusDays(30);
+        boolean resourceSearch = resourceIdContains != null && !resourceIdContains.isBlank();
+        if (resourceSearch) {
+            // An explicitly-started resource search keeps the established
+            // 30-day default while a date-less one intentionally spans all dates.
+            if (startDate != null && endDate == null) {
+                endDate = startDate.plusDays(30);
+            }
+        } else {
+            // Preserve the existing bounded default for unfiltered list calls.
+            if (startDate == null) {
+                startDate = LocalDate.now(ZoneId.systemDefault());
+            }
+            if (endDate == null) {
+                endDate = startDate.plusDays(30);
+            }
         }
 
         BookingStatus statusFilter;
@@ -67,7 +75,8 @@ public class BookingResource {
                 .build();
         }
 
-        List<Booking> bookings = bookingService.getBookings(calendarId, startDate, endDate, statusFilter);
+        List<Booking> bookings = bookingService.getBookings(
+            calendarId, startDate, endDate, statusFilter, resourceIdContains);
         return Response.ok(BookingListResponse.from(bookings)).build();
     }
 
