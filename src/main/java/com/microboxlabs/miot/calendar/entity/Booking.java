@@ -10,7 +10,10 @@ import org.hibernate.type.SqlTypes;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -121,6 +124,54 @@ public class Booking extends PanacheEntityBase {
     }
 
     // Finder methods
+
+    /**
+     * Find bookings whose generic resource identifier contains the requested
+     * text, optionally narrowed by the other list filters.
+     *
+     * <p>{@code resourceIdContains} is deliberately expressed in calendar-domain
+     * language. Callers decide what their resource identifiers mean.
+     */
+    public static List<Booking> findByResourceIdContaining(
+            UUID calendarId,
+            LocalDate startDate,
+            LocalDate endDate,
+            BookingStatus status,
+            String resourceIdContains) {
+        var conditions = new ArrayList<String>();
+        conditions.add("lower(resourceId) like :resourceIdPattern escape '!'");
+        var parameters = new HashMap<String, Object>();
+        parameters.put(
+            "resourceIdPattern",
+            "%" + escapeLikePattern(resourceIdContains.trim().toLowerCase(Locale.ROOT)) + "%");
+
+        if (calendarId != null) {
+            conditions.add("calendar.id = :calendarId");
+            parameters.put("calendarId", calendarId);
+        }
+        if (startDate != null) {
+            conditions.add("slotDate >= :startDate");
+            parameters.put("startDate", startDate);
+        }
+        if (endDate != null) {
+            conditions.add("slotDate <= :endDate");
+            parameters.put("endDate", endDate);
+        }
+        if (status != null) {
+            conditions.add("status = :status");
+            parameters.put("status", status);
+        }
+        String predicates = String.join(" and ", conditions);
+        return find(
+            predicates + " order by slotDate, slotHour, slotMinutes", parameters).list();
+    }
+
+    private static String escapeLikePattern(String value) {
+        return value
+            .replace("!", "!!")
+            .replace("%", "!%")
+            .replace("_", "!_");
+    }
 
     /**
      * Find bookings by calendar and date range
