@@ -8,7 +8,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.URL;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.temporal.TemporalAdjusters;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
@@ -169,5 +171,47 @@ class ManualSlotDurationResourceTest {
             .body("[0].slotDurationMinutes", equalTo(30))  // unchanged
             .body("[0].totalSlots", equalTo(8))            // unchanged
             .body("[0].bookableSlots", equalTo(8));        // unchanged (== totalSlots)
+    }
+
+    @Test
+    void explicitOverbookingBypassesManualWindowCapacity() {
+        String calendarId = createCalendar("msd-overbook", 1);
+        LocalDate bookingDate = VALID_FROM.with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
+        given().contentType(ContentType.JSON).body(timeWindowBody("MANUAL", 60, 8, 10, 1))
+            .when().post(CALENDARS_PATH + "/" + calendarId + "/time-windows")
+            .then().statusCode(201);
+
+        given().contentType(ContentType.JSON).body(String.format("""
+            { "calendarId": "%s", "startDate": "%s", "endDate": "%s" }
+            """, calendarId, bookingDate, bookingDate))
+            .when().post("/api/v1/miot-calendar/slots/generate")
+            .then().statusCode(200);
+
+        given().contentType(ContentType.JSON)
+            .body(bookingBody(calendarId, "manual-first", bookingDate, 8, false))
+            .when().post("/api/v1/miot-calendar/bookings")
+            .then().statusCode(201);
+
+        given().contentType(ContentType.JSON)
+            .body(bookingBody(calendarId, "manual-second", bookingDate, 9, false))
+            .when().post("/api/v1/miot-calendar/bookings")
+            .then().statusCode(409);
+
+        given().contentType(ContentType.JSON)
+            .body(bookingBody(calendarId, "manual-second", bookingDate, 9, true))
+            .when().post("/api/v1/miot-calendar/bookings")
+            .then().statusCode(201);
+    }
+
+    private static String bookingBody(String calendarId, String resourceId, LocalDate date,
+                                      int hour, boolean allowOverbooking) {
+        return String.format("""
+            {
+                "calendarId": "%s",
+                "resource": { "id": "%s", "type": "SERVICE" },
+                "slot": { "date": "%s", "hour": %d, "minutes": 0 },
+                "allowOverbooking": %b
+            }
+            """, calendarId, resourceId, date, hour, allowOverbooking);
     }
 }
