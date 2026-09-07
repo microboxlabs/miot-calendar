@@ -25,14 +25,25 @@ public class BookingValidationService {
      * @throws BookingValidationException if validation fails
      */
     public void validateBooking(Slot slot, String resourceId) {
+        validateBooking(slot, resourceId, false);
+    }
+
+    /**
+     * Validate a booking create request, optionally bypassing capacity limits.
+     * Structural booking guards (closed/generated-overflow slots and duplicate
+     * resources) always apply.
+     */
+    public void validateBooking(Slot slot, String resourceId, boolean allowOverbooking) {
         // 1. Check slot status
-        validateSlotStatus(slot);
+        validateSlotStatus(slot, allowOverbooking);
 
-        // 2. Check the parent window's total-capacity cap (MANUAL windows)
-        validateWindowCapacity(slot);
+        if (!allowOverbooking) {
+            // 2. Check the parent window's total-capacity cap (MANUAL windows)
+            validateWindowCapacity(slot);
 
-        // 3. Check slot capacity
-        validateSlotCapacity(slot);
+            // 3. Check slot capacity
+            validateSlotCapacity(slot);
+        }
 
         // 4. Check resource not already in slot
         validateResourceNotInSlot(slot, resourceId);
@@ -94,6 +105,10 @@ public class BookingValidationService {
      * Validate slot is open for bookings
      */
     private void validateSlotStatus(Slot slot) {
+        validateSlotStatus(slot, false);
+    }
+
+    private void validateSlotStatus(Slot slot, boolean allowOverbooking) {
         if (slot.status == SlotStatus.CLOSED) {
             throw new BookingValidationException(
                 "Slot is closed for bookings",
@@ -106,7 +121,7 @@ public class BookingValidationService {
                 "SLOT_OVERFLOW"
             );
         }
-        if (slot.status == SlotStatus.FULL) {
+        if (slot.status == SlotStatus.FULL && !allowOverbooking) {
             throw new BookingValidationException(
                 "Slot is at full capacity",
                 "SLOT_FULL"

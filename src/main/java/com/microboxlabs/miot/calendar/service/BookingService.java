@@ -99,7 +99,7 @@ public class BookingService {
         ));
 
         // Validate the booking
-        validationService.validateBooking(slot, request.resource().id());
+        validationService.validateBooking(slot, request.resource().id(), request.allowOverbooking());
 
         // Get calendar
         Calendar calendar = Calendar.findById(request.calendarId());

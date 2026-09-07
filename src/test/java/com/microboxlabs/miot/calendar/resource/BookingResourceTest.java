@@ -43,14 +43,16 @@ class BookingResourceTest {
     private int slotMinutes = 0;
     private boolean setupDone = false;
 
-    @BeforeEach
-    void setupRestAssured() {
-        RestAssured.baseURI = url.toString();
-        RestAssured.port = url.getPort();
-    }
-
+    /**
+     * One @BeforeEach only: the shared-fixture block below calls {@code given()}, which reads the
+     * base URI configured here. JUnit does not order two @BeforeEach methods of the same class, so
+     * they cannot be split.
+     */
     @BeforeEach
     void setup() {
+        RestAssured.baseURI = url.toString();
+        RestAssured.port = url.getPort();
+
         if (setupDone) return;
         setupDone = true;
         slotDate = LocalDate.now().plusDays(1);
@@ -325,6 +327,67 @@ class BookingResourceTest {
     }
 
     @Test
+    @Order(8)
+    void testSlotFullCanBeExplicitlyOverbooked() {
+        given()
+            .contentType(ContentType.JSON)
+            .body(String.format("""
+                {
+                    "calendarId": "%s",
+                    "resource": {
+                        "id": "SRV-003",
+                        "type": "SERVICE",
+                        "label": "Overbooked service"
+                    },
+                    "slot": {
+                        "date": "%s",
+                        "hour": %d,
+                        "minutes": %d
+                    },
+                    "allowOverbooking": true
+                }
+                """, calendarId, slotDate, slotHour, slotMinutes))
+            .when()
+            .post(bookingsUrl.toString())
+            .then()
+            .statusCode(201)
+            .body("resource.id", equalTo("SRV-003"));
+
+        given()
+            .queryParam("calendarId", calendarId)
+            .queryParam("startDate", slotDate.toString())
+            .queryParam("endDate", slotDate.toString())
+            .when()
+            .get("/api/v1/miot-calendar/slots")
+            .then()
+            .statusCode(200)
+            .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.currentOccupancy", equalTo(3))
+            .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.capacity", equalTo(2))
+            // Occupancy stays observable past capacity; availableCapacity never goes negative.
+            .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.availableCapacity", equalTo(0))
+            .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.status", equalTo("FULL"));
+    }
+
+    @Test
+    @Order(9)
+    void testOverbookingStillRejectsDuplicateResource() {
+        given()
+            .contentType(ContentType.JSON)
+            .body(String.format("""
+                {
+                    "calendarId": "%s",
+                    "resource": { "id": "SRV-003", "type": "SERVICE" },
+                    "slot": { "date": "%s", "hour": %d, "minutes": %d },
+                    "allowOverbooking": true
+                }
+                """, calendarId, slotDate, slotHour, slotMinutes))
+            .when()
+            .post(bookingsUrl.toString())
+            .then()
+            .statusCode(409);
+    }
+
+    @Test
     @Order(7)
     void testUpdateBookingResourceData() {
         // Update the booking's resource payload in place (slot unchanged).
@@ -395,7 +458,7 @@ class BookingResourceTest {
     }
 
     @Test
-    @Order(8)
+    @Order(10)
     void testCancelBooking() {
         given()
             .when()
@@ -443,7 +506,7 @@ class BookingResourceTest {
      * BookingValidationService already refuses).
      */
     @Test
-    @Order(9)
+    @Order(11)
     void testBookingRejectedOnBlockSlot() {
         // Fresh calendar so the BLOCK doesn't disturb sibling tests.
         String blockedCalendarId = given()
