@@ -26,22 +26,41 @@ class BookingValidationServiceTest {
 
     @Test
     void rejectsOverflowSlot() {
+        Slot slot = slotWithStatus(SlotStatus.OVERFLOW);
         BookingValidationException ex = assertThrows(BookingValidationException.class,
-                () -> validator.validateBooking(slotWithStatus(SlotStatus.OVERFLOW), "truck-1"));
+                () -> validator.validateBooking(slot, "truck-1"));
         assertEquals("SLOT_OVERFLOW", ex.getErrorCode());
     }
 
     @Test
     void rejectsClosedSlot() {
+        Slot slot = slotWithStatus(SlotStatus.CLOSED);
         BookingValidationException ex = assertThrows(BookingValidationException.class,
-                () -> validator.validateBooking(slotWithStatus(SlotStatus.CLOSED), "truck-1"));
+                () -> validator.validateBooking(slot, "truck-1"));
+        assertEquals("SLOT_CLOSED", ex.getErrorCode());
+    }
+
+    @Test
+    void overbookingStillRejectsOverflowSlot() {
+        Slot slot = slotWithStatus(SlotStatus.OVERFLOW);
+        BookingValidationException ex = assertThrows(BookingValidationException.class,
+                () -> validator.validateBooking(slot, "truck-1", true));
+        assertEquals("SLOT_OVERFLOW", ex.getErrorCode());
+    }
+
+    @Test
+    void overbookingStillRejectsClosedSlot() {
+        Slot slot = slotWithStatus(SlotStatus.CLOSED);
+        BookingValidationException ex = assertThrows(BookingValidationException.class,
+                () -> validator.validateBooking(slot, "truck-1", true));
         assertEquals("SLOT_CLOSED", ex.getErrorCode());
     }
 
     @Test
     void rejectsFullSlot() {
+        Slot slot = slotWithStatus(SlotStatus.FULL);
         BookingValidationException ex = assertThrows(BookingValidationException.class,
-                () -> validator.validateBooking(slotWithStatus(SlotStatus.FULL), "truck-1"));
+                () -> validator.validateBooking(slot, "truck-1"));
         assertEquals("SLOT_FULL", ex.getErrorCode());
     }
 }

@@ -19,11 +19,20 @@ public record BookingRequest(
     SlotData slot,
 
     @Schema(description = "Initial lifecycle status (defaults to PLANNED)", examples = {"PLANNED"})
-    String status
+    String status,
+
+    @Schema(description = "Allow this booking to exceed slot and time-window capacity. "
+        + "Closed and generated overflow slots remain protected.", defaultValue = "false")
+    boolean allowOverbooking
 ) {
     /** Back-compat canonical shape without a status (defaults to PLANNED). */
     public BookingRequest(UUID calendarId, ResourceData resource, SlotData slot) {
-        this(calendarId, resource, slot, null);
+        this(calendarId, resource, slot, null, false);
+    }
+
+    /** Back-compat shape with an initial status and ordinary capacity enforcement. */
+    public BookingRequest(UUID calendarId, ResourceData resource, SlotData slot, String status) {
+        this(calendarId, resource, slot, status, false);
     }
 
     /**
