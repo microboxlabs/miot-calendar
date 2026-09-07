@@ -33,6 +33,13 @@ public class CalendarResource {
 
     private static final Logger LOG = Logger.getLogger(CalendarResource.class);
 
+    /**
+     * Echoes the service type {@code GET /calendars/default} took into account.
+     * A client that does not see it is talking to a server that ignored the
+     * parameter, which is a failure to fall back from rather than an answer.
+     */
+    public static final String HEADER_RESOLVED_SERVICE_TYPE = "X-Resolved-Service-Type";
+
     @Inject
     CalendarService calendarService;
 
@@ -66,25 +73,38 @@ public class CalendarResource {
     @GET
     @Path("/default")
     @Transactional
-    @Operation(operationId = "getDefaultCalendar", summary = "Get the default calendar for an origin",
+    @Operation(operationId = "getDefaultCalendar",
+        summary = "Get the default calendar for an origin and service type",
         description = "Resolve the calendar an integrating system should book into when it was given none. "
-            + "Matches the active default whose filter names this origin, falling back to the default with no "
-            + "origin filter. Answers 204 when there is none: nothing is configured to receive those bookings, "
-            + "so none should be created. Deliberately NOT a 404 — a client must be able to tell that answer "
-            + "apart from talking to a server that has no such endpoint, which is a failure to fall back from "
-            + "rather than a decision to act on.")
-    @APIResponse(responseCode = "200", description = "Default calendar for the origin",
+            + "Matches the active default in descending specificity: the calendar naming both origin and "
+            + "service type, then the one naming the origin only, then the one naming the type only, then the "
+            + "catch-all naming neither. Answers 204 when no rung matches: nothing is configured to receive "
+            + "those bookings, so none should be created. Deliberately NOT a 404 — a client must be able to tell "
+            + "that answer apart from talking to a server that has no such endpoint, which is a failure to fall "
+            + "back from rather than a decision to act on.\n\n"
+            + "Every response echoes the service type that was taken into account in the "
+            + HEADER_RESOLVED_SERVICE_TYPE + " header. A query parameter inherits none of the 204-vs-404 "
+            + "protection above: a server too old to know this parameter ignores it and answers 200 with the "
+            + "origin's calendar, which a client cannot tell from a considered answer. Absence of the header "
+            + "means the type was not considered — treat it as a failure to fall back from, not as a decision.")
+    @APIResponse(responseCode = "200", description = "Default calendar for the origin and service type",
         content = @Content(schema = @Schema(implementation = CalendarResponse.class)))
-    @APIResponse(responseCode = "204", description = "No default calendar for this origin")
+    @APIResponse(responseCode = "204", description = "No default calendar for this origin and service type")
     public Response getDefaultCalendar(
             @Parameter(description = "Origin the booking belongs to, matched against the calendar filter's origin")
-            @QueryParam("origin") String origin) {
-        Calendar calendar = calendarService.getDefaultCalendarForOrigin(origin);
+            @QueryParam("origin") String origin,
+            @Parameter(description = "Service type the booking belongs to (v, otr, ote), matched against the "
+                + "calendar filter's serviceType. Omitted or blank resolves the origin's untyped default.")
+            @QueryParam("serviceType") String serviceType) {
+        Calendar calendar = calendarService.getDefaultCalendar(origin, serviceType);
+        String echo = serviceType == null ? "" : serviceType.trim().toLowerCase();
         if (calendar == null) {
-            LOG.debugf("No default calendar configured for origin: %s", origin);
-            return Response.noContent().build();
+            LOG.debugf("No default calendar configured for origin: %s, service type: %s", origin, echo);
+            return Response.noContent().header(HEADER_RESOLVED_SERVICE_TYPE, echo).build();
         }
-        return Response.ok(CalendarResponse.from(calendar, hasSlotManager(calendar.id))).build();
+        return Response.ok(CalendarResponse.from(calendar, hasSlotManager(calendar.id)))
+            .header(HEADER_RESOLVED_SERVICE_TYPE, echo)
+            .build();
     }
 
     @GET

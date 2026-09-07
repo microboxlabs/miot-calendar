@@ -44,15 +44,16 @@ public record CalendarResponse(
     List<CalendarGroupResponse> groups,
 
     @Schema(description = "Optional task filter map applied to client-side task lists tied to this calendar. " +
-        "Keys are drawn from the allowed set (origin, destination).",
-        examples = {"{\"origin\":\"ANF\"}"})
+        "Keys are drawn from the allowed set (origin, destination, serviceType).",
+        examples = {"{\"origin\":\"ANF\",\"serviceType\":\"otr\"}"})
     Map<String, String> filter,
 
     @Schema(description = "Whether this calendar has a SlotManager provisioned")
     Boolean hasSlotManager,
 
-    @Schema(required = true, description = "Whether this is the default calendar for its filter origin — the one " +
-        "an integrating system books into when it was given no calendar")
+    @Schema(required = true, description = "Whether this is the default calendar for its filter origin and " +
+        "service type — the one an integrating system books into when it was given no calendar. A calendar with " +
+        "no serviceType in its filter is the default for every type its origin does not claim specifically.")
     Boolean isDefault
 ) {
     /**

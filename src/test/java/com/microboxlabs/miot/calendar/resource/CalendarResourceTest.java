@@ -370,7 +370,25 @@ class CalendarResourceTest {
 
     /** Create a calendar, returning its id. Origin may be null for no filter. */
     private String createCalendar(String code, String origin, boolean isDefault) {
-        String filter = origin == null ? "null" : "{\"origin\": \"" + origin + "\"}";
+        return createCalendar(code, origin, null, isDefault);
+    }
+
+    /**
+     * Create a calendar, returning its id. Either key may be null; both null
+     * means no filter at all, which is the catch-all default's shape.
+     */
+    private String createCalendar(String code, String origin, String serviceType, boolean isDefault) {
+        StringBuilder keys = new StringBuilder();
+        if (origin != null) {
+            keys.append("\"origin\": \"").append(origin).append("\"");
+        }
+        if (serviceType != null) {
+            if (keys.length() > 0) {
+                keys.append(", ");
+            }
+            keys.append("\"serviceType\": \"").append(serviceType).append("\"");
+        }
+        String filter = keys.length() == 0 ? "null" : "{" + keys + "}";
         return given()
             .contentType(ContentType.JSON)
             .body("""
@@ -497,5 +515,143 @@ class CalendarResourceTest {
     void testCalendarsAreNotDefaultUnlessAsked() {
         String id = createCalendar("default-implicit", "IMP", false);
         assertDefaultFlag(id, false);
+    }
+
+    // --- Defaults scoped by (origin, service type) ---
+
+    @Test
+    void testOneOriginCanHoldADefaultPerServiceType() {
+        // The whole point of widening the key: before V17 the unique index
+        // allowed one default per origin, so these two could not coexist.
+        String untyped = createCalendar("stype-coex-plain", "SCA", null, true);
+        String otr = createCalendar("stype-coex-otr", "SCA", "otr", true);
+
+        assertDefaultFlag(untyped, true);
+        assertDefaultFlag(otr, true);
+    }
+
+    @Test
+    void testTypedDefaultWinsOverTheOriginsUntypedOne() {
+        createCalendar("stype-win-plain", "SCB", null, true);
+        String otr = createCalendar("stype-win-otr", "SCB", "otr", true);
+
+        given()
+            .queryParam("origin", "SCB")
+            .queryParam("serviceType", "otr")
+            .when()
+            .get("/api/v1/miot-calendar/calendars/default")
+            .then()
+            .statusCode(200)
+            .body("id", equalTo(otr));
+    }
+
+    @Test
+    void testUntypedOriginDefaultAnswersForAnUnclaimedType() {
+        // The rung that makes this migration free: every default predating
+        // service types carries none, so it keeps answering for v — and for
+        // any other type nobody has claimed yet.
+        String untyped = createCalendar("stype-fall-plain", "SCC", null, true);
+        createCalendar("stype-fall-otr", "SCC", "otr", true);
+
+        given()
+            .queryParam("origin", "SCC")
+            .queryParam("serviceType", "ote")
+            .when()
+            .get("/api/v1/miot-calendar/calendars/default")
+            .then()
+            .statusCode(200)
+            .body("id", equalTo(untyped));
+    }
+
+    @Test
+    void testTypeOnlyDefaultServesEveryOriginThatDoesNotClaimTheType() {
+        String shared = createCalendar("stype-shared-otr", null, "otr", true);
+
+        given()
+            .queryParam("origin", "SCD-" + System.nanoTime())
+            .queryParam("serviceType", "otr")
+            .when()
+            .get("/api/v1/miot-calendar/calendars/default")
+            .then()
+            .statusCode(200)
+            .body("id", equalTo(shared));
+    }
+
+    @Test
+    void testPromotingATypedDefaultLeavesTheUntypedOneAlone() {
+        // Demotion is keyed on the pair. Keyed on the origin alone, claiming
+        // the otr default would silently unset a calendar nobody touched.
+        String untyped = createCalendar("stype-dem-plain", "SCE", null, true);
+        String otrFirst = createCalendar("stype-dem-otr-1", "SCE", "otr", true);
+        String otrSecond = createCalendar("stype-dem-otr-2", "SCE", "otr", true);
+
+        assertDefaultFlag(untyped, true);
+        assertDefaultFlag(otrFirst, false);
+        assertDefaultFlag(otrSecond, true);
+    }
+
+    @Test
+    void testServiceTypeIsStoredLowerCased() {
+        // The unique index compares stored text, so OTR and otr must not be
+        // able to claim the same origin's default twice.
+        String id = createCalendar("stype-case", "SCF", "OTR", true);
+
+        given()
+            .when()
+            .get("/api/v1/miot-calendar/calendars/" + id)
+            .then()
+            .statusCode(200)
+            .body("filter.serviceType", equalTo("otr"));
+
+        given()
+            .queryParam("origin", "SCF")
+            .queryParam("serviceType", "otr")
+            .when()
+            .get("/api/v1/miot-calendar/calendars/default")
+            .then()
+            .statusCode(200)
+            .body("id", equalTo(id));
+    }
+
+    @Test
+    void testDefaultLookupEchoesTheServiceTypeItConsidered() {
+        // The echo is how a caller tells this apart from a server too old to
+        // know the parameter, which would answer 200 with the wrong calendar.
+        createCalendar("stype-echo", "SCG", "otr", true);
+
+        given()
+            .queryParam("origin", "SCG")
+            .queryParam("serviceType", "otr")
+            .when()
+            .get("/api/v1/miot-calendar/calendars/default")
+            .then()
+            .statusCode(200)
+            .header("X-Resolved-Service-Type", equalTo("otr"));
+
+        given()
+            .queryParam("origin", "NOPE-" + System.nanoTime())
+            .queryParam("serviceType", "ote")
+            .when()
+            .get("/api/v1/miot-calendar/calendars/default")
+            .then()
+            .statusCode(204)
+            .header("X-Resolved-Service-Type", equalTo("ote"));
+    }
+
+    @Test
+    void testUnknownFilterKeyIsRejected() {
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {
+                    "code": "stype-badkey",
+                    "name": "stype-badkey",
+                    "filter": {"tipoViaje": "Sider"}
+                }
+                """)
+            .when()
+            .post("/api/v1/miot-calendar/calendars")
+            .then()
+            .statusCode(400);
     }
 }

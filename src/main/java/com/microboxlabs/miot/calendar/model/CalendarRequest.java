@@ -35,20 +35,21 @@ public record CalendarRequest(
     List<String> groups,
 
     @Schema(description = "Optional task filter map applied to client-side task lists tied to this calendar. " +
-        "null = no change; {} = clear; populated map = replace. Allowed keys: origin, destination.",
-        examples = {"{\"origin\":\"ANF\"}"})
+        "null = no change; {} = clear; populated map = replace. Allowed keys: origin, destination, serviceType. " +
+        "Origin and serviceType together scope isDefault; serviceType is stored lower-cased.",
+        examples = {"{\"origin\":\"ANF\",\"serviceType\":\"otr\"}"})
     Map<String, String> filter,
 
     @Schema(description = "Whether to auto-provision a default SlotManager on creation. Defaults to true when null.", defaultValue = "true")
     Boolean autoSlotManager,
 
-    @Schema(description = "Mark this calendar as the default for its filter origin — the calendar an integrating " +
-        "system books into when it was given none. Setting it demotes the previous default for the same origin. " +
-        "null = no change.", defaultValue = "false")
+    @Schema(description = "Mark this calendar as the default for its filter origin and service type — the calendar " +
+        "an integrating system books into when it was given none. Setting it demotes the previous default for the " +
+        "same pair. null = no change.", defaultValue = "false")
     Boolean isDefault
 ) {
     public static final Set<String> ALLOWED_FILTER_KEYS =
-        Set.of(Calendar.FILTER_KEY_ORIGIN, "destination");
+        Set.of(Calendar.FILTER_KEY_ORIGIN, "destination", Calendar.FILTER_KEY_SERVICE_TYPE);
 
     /**
      * Validate the calendar request

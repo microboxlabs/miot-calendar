@@ -78,12 +78,13 @@ public class CalendarService {
     }
 
     /**
-     * The calendar an integrating system should book into for this origin when
-     * it was given none. Null when nothing is configured to receive them.
+     * The calendar an integrating system should book into for this origin and
+     * service type when it was given none. Null when nothing is configured to
+     * receive them.
      */
     @Transactional
-    public Calendar getDefaultCalendarForOrigin(String origin) {
-        return Calendar.findDefaultForOrigin(origin);
+    public Calendar getDefaultCalendar(String origin, String serviceType) {
+        return Calendar.findDefault(origin, serviceType);
     }
 
     /**
@@ -248,10 +249,10 @@ public class CalendarService {
     }
 
     /**
-     * A default is a radio button, not a checkbox: one calendar per origin. The
-     * caller states an intent and the previous holder is demoted for them —
-     * refusing instead would make every reassignment a two-step dance through
-     * a calendar nobody is trying to edit.
+     * A default is a radio button, not a checkbox: one calendar per (origin,
+     * service type). The caller states an intent and the previous holder is
+     * demoted for them — refusing instead would make every reassignment a
+     * two-step dance through a calendar nobody is trying to edit.
      */
     private void applyDefaultFlag(Calendar calendar, Boolean requested) {
         boolean wanted = requested != null ? requested : Boolean.TRUE.equals(calendar.isDefault);
@@ -262,21 +263,29 @@ public class CalendarService {
     }
 
     /**
-     * Take the default flag for this calendar's origin, demoting whoever holds
-     * it. The demotions are flushed before the claim lands because
-     * {@code uq_cld_calendars_default_per_origin} is checked per statement, and
-     * Hibernate would otherwise be free to write the new holder first.
+     * Take the default flag for this calendar's (origin, service type),
+     * demoting whoever holds it. Keyed on the same pair as
+     * {@code uq_cld_calendars_default_per_origin_and_type} — demote on a
+     * narrower key and the claim trips the index; on a wider one and it
+     * silently unsets a calendar the caller never touched.
+     *
+     * <p>The demotions are flushed before the claim lands because the index is
+     * checked per statement, and Hibernate would otherwise be free to write
+     * the new holder first.
      */
     private void claimDefault(Calendar calendar) {
-        String key = Calendar.defaultOriginKey(calendar.filter);
+        String origin = Calendar.defaultOriginKey(calendar.filter);
+        String serviceType = Calendar.defaultServiceTypeKey(calendar.filter);
         for (Calendar holder : Calendar.findDefaults()) {
             boolean isSelf = holder.id != null && holder.id.equals(calendar.id);
-            if (isSelf || !Calendar.defaultOriginKey(holder.filter).equals(key)) {
+            if (isSelf
+                    || !Calendar.defaultOriginKey(holder.filter).equals(origin)
+                    || !Calendar.defaultServiceTypeKey(holder.filter).equals(serviceType)) {
                 continue;
             }
             holder.isDefault = false;
-            LOG.infof("Demoted calendar %s (%s) as default for origin '%s'",
-                holder.name, holder.code, key);
+            LOG.infof("Demoted calendar %s (%s) as default for origin '%s' service type '%s'",
+                holder.name, holder.code, origin, serviceType);
         }
         Calendar.flush();
         calendar.isDefault = true;
@@ -285,6 +294,11 @@ public class CalendarService {
     /**
      * Drop blank/null entries and detach from the request map. Returns null when nothing remains
      * so the JSONB column stores SQL NULL instead of an empty object.
+     *
+     * <p>{@code serviceType} is lower-cased on the way in. The unique index
+     * compares the stored text, so leaving case to the caller would let
+     * {@code OTR} and {@code otr} both claim the default for one origin, and
+     * a lookup for either would then have two winners to choose between.
      */
     @SuppressWarnings("java:S1168") // intentional null so JPA writes SQL NULL to the JSONB filter column
     private Map<String, String> sanitizeFilter(Map<String, String> input) {
@@ -294,10 +308,18 @@ public class CalendarService {
         Map<String, String> clean = new HashMap<>();
         for (Map.Entry<String, String> e : input.entrySet()) {
             if (e.getValue() != null && !e.getValue().isBlank()) {
-                clean.put(e.getKey(), e.getValue());
+                clean.put(e.getKey(), normalizeFilterValue(e.getKey(), e.getValue()));
             }
         }
         return clean.isEmpty() ? null : clean;
+    }
+
+    /** Trim every filter value; canonicalize the one the unique index keys on. */
+    private String normalizeFilterValue(String key, String value) {
+        String trimmed = value.trim();
+        return Calendar.FILTER_KEY_SERVICE_TYPE.equals(key)
+            ? trimmed.toLowerCase()
+            : trimmed;
     }
 
     /**
