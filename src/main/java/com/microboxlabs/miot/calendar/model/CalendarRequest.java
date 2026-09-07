@@ -64,6 +64,18 @@ public record CalendarRequest(
         if (parallelism != null && parallelism < 1) {
             throw new IllegalArgumentException("Parallelism must be at least 1");
         }
+        validateFilter();
+    }
+
+    /**
+     * Rejects filter keys outside the allowed set.
+     *
+     * <p>Separate from {@link #validate()} because an update is a partial
+     * request — no code, no name — so it cannot run the whole thing, and
+     * running none of it let a PUT persist any key at all while the POST that
+     * created the same calendar refused it.
+     */
+    public void validateFilter() {
         if (filter != null) {
             for (String key : filter.keySet()) {
                 if (!ALLOWED_FILTER_KEYS.contains(key)) {

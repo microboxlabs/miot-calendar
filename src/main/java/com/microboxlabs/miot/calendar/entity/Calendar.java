@@ -34,6 +34,9 @@ public class Calendar extends PanacheEntityBase {
      */
     public static final String FILTER_KEY_SERVICE_TYPE = "serviceType";
 
+    /** Rung of a default that does not answer for the asked-for pair at all. */
+    private static final int RUNG_NO_MATCH = Integer.MAX_VALUE;
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id")
@@ -178,38 +181,49 @@ public class Calendar extends PanacheEntityBase {
         String wantedOrigin = origin == null ? "" : origin.trim();
         String wantedType = serviceType == null ? "" : serviceType.trim().toLowerCase();
 
-        Calendar exact = null;
-        Calendar originOnly = null;
-        Calendar typeOnly = null;
-        Calendar catchAll = null;
-
+        Calendar best = null;
+        int bestRung = RUNG_NO_MATCH;
         for (Calendar candidate : findDefaults()) {
-            if (!Boolean.TRUE.equals(candidate.active)) {
-                continue;
-            }
-            String key = defaultOriginKey(candidate.filter);
-            String type = defaultServiceTypeKey(candidate.filter);
-            boolean originMatches = !wantedOrigin.isEmpty() && key.equals(wantedOrigin);
-            boolean typeMatches = !wantedType.isEmpty() && type.equals(wantedType);
-
-            if (originMatches && typeMatches) {
-                exact = candidate;
-            } else if (originMatches && type.isEmpty()) {
-                originOnly = candidate;
-            } else if (key.isEmpty() && typeMatches) {
-                typeOnly = candidate;
-            } else if (key.isEmpty() && type.isEmpty()) {
-                catchAll = candidate;
+            int rung = rungFor(candidate, wantedOrigin, wantedType);
+            if (rung < bestRung) {
+                bestRung = rung;
+                best = candidate;
             }
         }
+        return best;
+    }
 
-        if (exact != null) {
-            return exact;
+    /**
+     * Which rung of {@link #findDefault} this default answers on, lower being
+     * more specific, {@link #RUNG_NO_MATCH} when it does not answer at all.
+     *
+     * <p>At most one default can sit on any given rung: each rung is one
+     * {@code (origin, serviceType)} key, and
+     * {@code uq_cld_calendars_default_per_origin_and_type} allows one default
+     * per key. So the first candidate found on the best rung is the only one.
+     */
+    private static int rungFor(Calendar candidate, String wantedOrigin, String wantedType) {
+        if (!Boolean.TRUE.equals(candidate.active)) {
+            return RUNG_NO_MATCH;
         }
-        if (originOnly != null) {
-            return originOnly;
+        String origin = defaultOriginKey(candidate.filter);
+        String type = defaultServiceTypeKey(candidate.filter);
+        boolean originMatches = !wantedOrigin.isEmpty() && origin.equals(wantedOrigin);
+        boolean typeMatches = !wantedType.isEmpty() && type.equals(wantedType);
+
+        if (originMatches && typeMatches) {
+            return 0;
         }
-        return typeOnly != null ? typeOnly : catchAll;
+        if (originMatches && type.isEmpty()) {
+            return 1;
+        }
+        if (origin.isEmpty() && typeMatches) {
+            return 2;
+        }
+        if (origin.isEmpty() && type.isEmpty()) {
+            return 3;
+        }
+        return RUNG_NO_MATCH;
     }
 
     /**

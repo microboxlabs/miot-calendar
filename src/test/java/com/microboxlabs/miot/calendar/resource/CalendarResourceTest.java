@@ -383,12 +383,12 @@ class CalendarResourceTest {
             keys.append("\"origin\": \"").append(origin).append("\"");
         }
         if (serviceType != null) {
-            if (keys.length() > 0) {
+            if (!keys.isEmpty()) {
                 keys.append(", ");
             }
             keys.append("\"serviceType\": \"").append(serviceType).append("\"");
         }
-        String filter = keys.length() == 0 ? "null" : "{" + keys + "}";
+        String filter = keys.isEmpty() ? "null" : "{" + keys + "}";
         return given()
             .contentType(ContentType.JSON)
             .body("""
@@ -639,6 +639,35 @@ class CalendarResourceTest {
     }
 
     @Test
+    void testCatchAllDefaultAnswersWhenNothingElseDoes() {
+        // The last rung: no origin, no type. Created and demoted inside one
+        // test because this class shares database state, and a standing
+        // catch-all would answer for every other test's unmatched lookup.
+        String catchAll = createCalendar("stype-catchall", null, null, true);
+        try {
+            given()
+                .queryParam("origin", "SCH-" + System.nanoTime())
+                .queryParam("serviceType", "ote")
+                .when()
+                .get("/api/v1/miot-calendar/calendars/default")
+                .then()
+                .statusCode(200)
+                .body("id", equalTo(catchAll));
+        } finally {
+            given()
+                .contentType(ContentType.JSON)
+                .body("""
+                    {"isDefault": false}
+                    """)
+                .when()
+                .put("/api/v1/miot-calendar/calendars/" + catchAll)
+                .then()
+                .statusCode(200)
+                .body("isDefault", equalTo(false));
+        }
+    }
+
+    @Test
     void testUnknownFilterKeyIsRejected() {
         given()
             .contentType(ContentType.JSON)
@@ -653,5 +682,29 @@ class CalendarResourceTest {
             .post("/api/v1/miot-calendar/calendars")
             .then()
             .statusCode(400);
+    }
+
+    @Test
+    void testUnknownFilterKeyIsRejectedOnUpdateToo() {
+        // An update is partial, so it cannot run the whole of validate() —
+        // which is how a PUT used to persist any key the POST refused.
+        String id = createCalendar("stype-badkey-put", "SCI", null, false);
+
+        given()
+            .contentType(ContentType.JSON)
+            .body("""
+                {"filter": {"tipoViaje": "Sider"}}
+                """)
+            .when()
+            .put("/api/v1/miot-calendar/calendars/" + id)
+            .then()
+            .statusCode(400);
+
+        given()
+            .when()
+            .get("/api/v1/miot-calendar/calendars/" + id)
+            .then()
+            .statusCode(200)
+            .body("filter.tipoViaje", nullValue());
     }
 }

@@ -167,6 +167,9 @@ public class CalendarService {
         }
 
         if (request.filter() != null) {
+            // An update is partial, so it cannot run the whole of validate() —
+            // but it must not be the way an unknown key gets in either.
+            request.validateFilter();
             calendar.filter = sanitizeFilter(request.filter());
         }
 
