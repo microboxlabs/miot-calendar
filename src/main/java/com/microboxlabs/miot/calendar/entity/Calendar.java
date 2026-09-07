@@ -25,6 +25,18 @@ public class Calendar extends PanacheEntityBase {
     /** Filter key naming the origin a calendar serves; scopes {@link #isDefault}. */
     public static final String FILTER_KEY_ORIGIN = "origin";
 
+    /**
+     * Filter key naming the service type a calendar serves ({@code v},
+     * {@code otr}, {@code ote}); scopes {@link #isDefault} alongside
+     * {@link #FILTER_KEY_ORIGIN}. Absent means the calendar answers for every
+     * type nothing else claims — which is what every calendar predating this
+     * key does, and why they keep resolving exactly as before.
+     */
+    public static final String FILTER_KEY_SERVICE_TYPE = "serviceType";
+
+    /** Rung of a default that does not answer for the asked-for pair at all. */
+    private static final int RUNG_NO_MATCH = Integer.MAX_VALUE;
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id")
@@ -55,7 +67,8 @@ public class Calendar extends PanacheEntityBase {
     /**
      * Whether this is the calendar to use when an integrating system must place
      * a booking but was given no calendar to place it in. Scoped by
-     * {@link #filter}'s {@code origin} — see {@link #findDefaultForOrigin}.
+     * {@link #filter}'s {@code origin} and {@code serviceType} — see
+     * {@link #findDefault}.
      */
     @Column(name = "is_default", nullable = false)
     public Boolean isDefault = false;
@@ -115,11 +128,25 @@ public class Calendar extends PanacheEntityBase {
 
     /** The key a default calendar answers for: its filter origin, or "" for none. */
     public static String defaultOriginKey(Map<String, String> filter) {
+        return filterValue(filter, FILTER_KEY_ORIGIN);
+    }
+
+    /**
+     * The service type a default calendar answers for, or "" when it answers
+     * for every type nothing else claims. Stored lower-cased (see
+     * {@code CalendarService#sanitizeFilter}) so this and the unique index
+     * agree on what counts as the same key.
+     */
+    public static String defaultServiceTypeKey(Map<String, String> filter) {
+        return filterValue(filter, FILTER_KEY_SERVICE_TYPE);
+    }
+
+    private static String filterValue(Map<String, String> filter, String key) {
         if (filter == null) {
             return "";
         }
-        String origin = filter.get(FILTER_KEY_ORIGIN);
-        return origin == null ? "" : origin.trim();
+        String value = filter.get(key);
+        return value == null ? "" : value.trim();
     }
 
     /** All calendars flagged default, active or not. */
@@ -128,30 +155,75 @@ public class Calendar extends PanacheEntityBase {
     }
 
     /**
-     * The active default calendar for an origin: the one whose filter names
-     * that origin, else the one with no origin filter, which answers for
-     * everything not claimed specifically. Null when neither exists — a
-     * meaningful answer, not a lookup failure: the caller has nowhere to book.
+     * The active default calendar for an origin and service type, in
+     * descending specificity:
      *
-     * <p>Matched in Java rather than SQL because the origin lives inside a
-     * JSONB column and the candidate set is one row per origin.
+     * <ol>
+     *   <li>the calendar naming both — SCL's {@code otr} calendar</li>
+     *   <li>the calendar naming the origin and no type — SCL's catch-all,
+     *       which is every default that predates service types</li>
+     *   <li>the calendar naming the type and no origin — one {@code otr}
+     *       calendar shared by every delegación</li>
+     *   <li>the calendar naming neither — the catch-all of last resort</li>
+     * </ol>
+     *
+     * <p>Rung 2 is why adding this key moves nothing: existing defaults carry
+     * no {@code serviceType}, so a {@code v} service still lands on its
+     * origin's calendar until someone creates one that names a type.
+     *
+     * <p>Null when no rung matches — a meaningful answer, not a lookup
+     * failure: the caller has nowhere to book and should book nowhere.
+     *
+     * <p>Matched in Java rather than SQL because both keys live inside a JSONB
+     * column and the candidate set is one row per (origin, type) pair.
      */
-    public static Calendar findDefaultForOrigin(String origin) {
-        String wanted = origin == null ? "" : origin.trim();
-        Calendar fallback = null;
+    public static Calendar findDefault(String origin, String serviceType) {
+        String wantedOrigin = origin == null ? "" : origin.trim();
+        String wantedType = serviceType == null ? "" : serviceType.trim().toLowerCase();
+
+        Calendar best = null;
+        int bestRung = RUNG_NO_MATCH;
         for (Calendar candidate : findDefaults()) {
-            if (!Boolean.TRUE.equals(candidate.active)) {
-                continue;
-            }
-            String key = defaultOriginKey(candidate.filter);
-            if (!wanted.isEmpty() && key.equals(wanted)) {
-                return candidate;
-            }
-            if (key.isEmpty()) {
-                fallback = candidate;
+            int rung = rungFor(candidate, wantedOrigin, wantedType);
+            if (rung < bestRung) {
+                bestRung = rung;
+                best = candidate;
             }
         }
-        return fallback;
+        return best;
+    }
+
+    /**
+     * Which rung of {@link #findDefault} this default answers on, lower being
+     * more specific, {@link #RUNG_NO_MATCH} when it does not answer at all.
+     *
+     * <p>At most one default can sit on any given rung: each rung is one
+     * {@code (origin, serviceType)} key, and
+     * {@code uq_cld_calendars_default_per_origin_and_type} allows one default
+     * per key. So the first candidate found on the best rung is the only one.
+     */
+    private static int rungFor(Calendar candidate, String wantedOrigin, String wantedType) {
+        if (!Boolean.TRUE.equals(candidate.active)) {
+            return RUNG_NO_MATCH;
+        }
+        String origin = defaultOriginKey(candidate.filter);
+        String type = defaultServiceTypeKey(candidate.filter);
+        boolean originMatches = !wantedOrigin.isEmpty() && origin.equals(wantedOrigin);
+        boolean typeMatches = !wantedType.isEmpty() && type.equals(wantedType);
+
+        if (originMatches && typeMatches) {
+            return 0;
+        }
+        if (originMatches && type.isEmpty()) {
+            return 1;
+        }
+        if (origin.isEmpty() && typeMatches) {
+            return 2;
+        }
+        if (origin.isEmpty() && type.isEmpty()) {
+            return 3;
+        }
+        return RUNG_NO_MATCH;
     }
 
     /**
