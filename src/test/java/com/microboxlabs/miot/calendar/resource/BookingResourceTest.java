@@ -43,14 +43,16 @@ class BookingResourceTest {
     private int slotMinutes = 0;
     private boolean setupDone = false;
 
-    @BeforeEach
-    void setupRestAssured() {
-        RestAssured.baseURI = url.toString();
-        RestAssured.port = url.getPort();
-    }
-
+    /**
+     * One @BeforeEach only: the shared-fixture block below calls {@code given()}, which reads the
+     * base URI configured here. JUnit does not order two @BeforeEach methods of the same class, so
+     * they cannot be split.
+     */
     @BeforeEach
     void setup() {
+        RestAssured.baseURI = url.toString();
+        RestAssured.port = url.getPort();
+
         if (setupDone) return;
         setupDone = true;
         slotDate = LocalDate.now().plusDays(1);
@@ -361,6 +363,8 @@ class BookingResourceTest {
             .statusCode(200)
             .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.currentOccupancy", equalTo(3))
             .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.capacity", equalTo(2))
+            // Occupancy stays observable past capacity; availableCapacity never goes negative.
+            .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.availableCapacity", equalTo(0))
             .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.status", equalTo("FULL"));
     }
 
