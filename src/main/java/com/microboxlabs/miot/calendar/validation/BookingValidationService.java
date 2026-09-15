@@ -64,9 +64,11 @@ public class BookingValidationService {
      *
      * <ul>
      *   <li><b>Slot status</b> on the target — same as create.
-     *   <li><b>Window capacity</b> — skipped when the move stays inside the same window+date (the
-     *       day-cap count is unchanged). For cross-window or cross-date moves the standard cap
-     *       check applies to the target window only; the source can never overflow from a move.
+     *   <li><b>Window capacity</b> — skipped when the move stays inside the same window+date and
+     *       the booking already counts towards that window's day cap (one booking out, one
+     *       booking in). For cross-window or cross-date moves, and for a booking that holds no
+     *       seat yet, the standard cap check applies to the target window only; the source can
+     *       never overflow from a move.
      *   <li><b>Slot capacity</b> on the target — same as create.
      *   <li><b>Resource-not-in-target</b> — a row at the target with this resource is a duplicate
      *       only if it is not the booking being moved itself. Callers must only invoke this when
@@ -77,20 +79,22 @@ public class BookingValidationService {
      * @param oldSlot The booking's current slot
      * @param newSlot The slot to move into; must differ from {@code oldSlot}
      * @param resourceId The booking's resource id (carried over from the existing booking)
+     * @param holdsSeat Whether the booking currently occupies its slot — false for a cancelled
+     *                  booking, whose move adds one to the target window's day count
      * @throws BookingValidationException if validation fails
      */
-    public void validateMove(Slot oldSlot, Slot newSlot, String resourceId) {
+    public void validateMove(Slot oldSlot, Slot newSlot, String resourceId, boolean holdsSeat) {
         validateSlotStatus(newSlot);
 
-        // A same-window+same-date move leaves the day-cap count unchanged (one booking out, one
-        // booking in) so there is nothing to check. Cross-window or cross-date adds 1 to the
-        // target window's count for the date; apply the standard cap check there.
+        // A same-window+same-date move by a booking that already counts leaves the day-cap count
+        // unchanged (one booking out, one booking in) so there is nothing to check. Anything else
+        // adds 1 to the target window's count for the date; apply the standard cap check there.
         boolean sameWindowAndDate =
             oldSlot.timeWindow != null
                 && newSlot.timeWindow != null
                 && oldSlot.timeWindow.id.equals(newSlot.timeWindow.id)
                 && oldSlot.slotDate.equals(newSlot.slotDate);
-        if (!sameWindowAndDate) {
+        if (!sameWindowAndDate || !holdsSeat) {
             validateWindowCapacity(newSlot);
         }
 

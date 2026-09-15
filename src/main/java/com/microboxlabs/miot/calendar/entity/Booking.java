@@ -125,6 +125,19 @@ public class Booking extends PanacheEntityBase {
         updatedAt = ZonedDateTime.now(ZoneOffset.UTC);
     }
 
+    /**
+     * Whether this booking holds a seat in its slot: true in every status but
+     * {@link BookingStatus#CANCELLED}.
+     *
+     * <p>A cancelled booking is kept as history — callers that want to preserve
+     * the record patch {@code CANCELLED} instead of deleting the row — and a
+     * row kept for history must not keep consuming the slot's capacity or its
+     * time window's daily cap.
+     */
+    public boolean occupiesSlot() {
+        return status != BookingStatus.CANCELLED;
+    }
+
     // Finder methods
 
     /**
@@ -242,9 +255,11 @@ public class Booking extends PanacheEntityBase {
     /**
      * Count bookings made in a given time window on a given date — used to enforce a MANUAL
      * window's total-capacity cap (the cap applies across all of the window's slots for the day).
+     * Cancelled bookings are excluded: they no longer hold a seat (see {@link #occupiesSlot()}).
      */
     public static long countByWindowAndDate(UUID timeWindowId, LocalDate date) {
-        return count("slot.timeWindow.id = ?1 and slotDate = ?2", timeWindowId, date);
+        return count("slot.timeWindow.id = ?1 and slotDate = ?2 and status <> ?3",
+            timeWindowId, date, BookingStatus.CANCELLED);
     }
 
     /**

@@ -61,7 +61,7 @@ src/main/java/com/microboxlabs/miot/calendar/
 - **Soft deletes** via `active` boolean on Calendar, CalendarGroup, SlotManager — never hard delete these
 - **Booking.resourceData** is stored as PostgreSQL JSONB for flexible metadata
 - **Slots are materialized** — pre-generated from TimeWindow configs for O(1) availability queries
-- Slot occupancy/status auto-updates on booking create/delete
+- Slot occupancy/status auto-updates on booking create, delete, move and cancel — a booking holds a seat in every status but CANCELLED
 
 ### Domain Model
 
