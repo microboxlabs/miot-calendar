@@ -125,7 +125,9 @@ public class BookingService {
         booking.persist();
 
         // Increment slot occupancy
-        slotService.incrementOccupancy(slot);
+        if (booking.occupiesSlot()) {
+            slotService.incrementOccupancy(slot);
+        }
 
         LOG.infof("Created booking %s for resource %s in slot %s",
             booking.id, booking.resourceId, slot.id);
@@ -179,9 +181,10 @@ public class BookingService {
         ));
 
         boolean slotChanged = !oldSlot.id.equals(newSlot.id);
+        boolean heldSeat = booking.occupiesSlot();
 
         if (slotChanged) {
-            validationService.validateMove(oldSlot, newSlot, booking.resourceId);
+            validationService.validateMove(oldSlot, newSlot, booking.resourceId, heldSeat);
         }
 
         if (slotChanged) {
@@ -202,7 +205,12 @@ public class BookingService {
         booking.persist();
 
         if (slotChanged) {
-            slotService.decrementOccupancy(oldSlot);
+            // The move resets the status to PLANNED, so the target always gains a seat. The
+            // source only gives one back if the booking was still holding it — a cancelled
+            // booking released its seat when it was cancelled.
+            if (heldSeat) {
+                slotService.decrementOccupancy(oldSlot);
+            }
             slotService.incrementOccupancy(newSlot);
             LOG.infof("Moved booking %s for resource %s from slot %s to slot %s",
                 booking.id, booking.resourceId, oldSlot.id, newSlot.id);
@@ -241,15 +249,7 @@ public class BookingService {
             }
         }
 
-        BookingStatus targetStatus = BookingStatus.parse(rawStatus);
-        if (targetStatus != null && targetStatus != booking.status) {
-            if (!booking.status.canTransitionTo(targetStatus)) {
-                throw new BookingValidationException(String.format(
-                    "Status regression: booking %s is %s, cannot go back to %s",
-                    bookingId, booking.status, targetStatus), "STATUS_REGRESSION");
-            }
-            booking.status = targetStatus;
-        }
+        applyStatusChange(booking, BookingStatus.parse(rawStatus));
 
         if (resource != null) {
             booking.resourceType = resource.type();
@@ -380,23 +380,44 @@ public class BookingService {
     }
 
     /**
+     * Move a booking to {@code targetStatus} and keep its slot's occupancy in
+     * step. A null or same status is a no-op; a regression throws
+     * {@code STATUS_REGRESSION}.
+     *
+     * <p>Cancelling gives the seat back. Without this the cancelled row keeps
+     * consuming the slot's capacity and its time window's daily cap while the
+     * planning grid no longer draws it, so the window reports itself full with
+     * empty slots in it.
+     */
+    private void applyStatusChange(Booking booking, BookingStatus targetStatus) {
+        if (targetStatus == null || targetStatus == booking.status) {
+            return;
+        }
+        if (!booking.status.canTransitionTo(targetStatus)) {
+            throw new BookingValidationException(String.format(
+                "Status regression: booking %s is %s, cannot go back to %s",
+                booking.id, booking.status, targetStatus), "STATUS_REGRESSION");
+        }
+        boolean heldSeat = booking.occupiesSlot();
+        booking.status = targetStatus;
+        if (heldSeat && !booking.occupiesSlot()) {
+            slotService.decrementOccupancy(booking.slot);
+        } else if (!heldSeat && booking.occupiesSlot()) {
+            slotService.incrementOccupancy(booking.slot);
+        }
+    }
+
+    /**
      * Apply one resource patch to a single booking: forward-only status move
      * (regression throws {@code STATUS_REGRESSION}), a shallow resource-data
      * merge and the free-form external-sync stamp, then persist. Extracted from
      * {@link #patchBookingsByResource} so the per-booking branching stays out
      * of the loop.
      */
-    private static void applyPatch(Booking booking, BookingStatus targetStatus,
-                                   Map<String, Object> resourceDataPatch,
-                                   BookingSyncStatus targetSyncStatus, String syncDetail) {
-        if (targetStatus != null && targetStatus != booking.status) {
-            if (!booking.status.canTransitionTo(targetStatus)) {
-                throw new BookingValidationException(String.format(
-                    "Status regression: booking %s is %s, cannot go back to %s",
-                    booking.id, booking.status, targetStatus), "STATUS_REGRESSION");
-            }
-            booking.status = targetStatus;
-        }
+    private void applyPatch(Booking booking, BookingStatus targetStatus,
+                            Map<String, Object> resourceDataPatch,
+                            BookingSyncStatus targetSyncStatus, String syncDetail) {
+        applyStatusChange(booking, targetStatus);
         if (resourceDataPatch != null && !resourceDataPatch.isEmpty()) {
             Map<String, Object> merged = booking.resourceData == null
                 ? new HashMap<>()
@@ -423,12 +444,15 @@ public class BookingService {
         }
 
         Slot slot = booking.slot;
-        
+        boolean heldSeat = booking.occupiesSlot();
+
         // Delete the booking
         booking.delete();
 
-        // Decrement slot occupancy
-        slotService.decrementOccupancy(slot);
+        // Decrement slot occupancy — a booking already cancelled in place gave its seat back then
+        if (heldSeat) {
+            slotService.decrementOccupancy(slot);
+        }
 
         LOG.infof("Cancelled booking %s for resource %s", bookingId, booking.resourceId);
     }
