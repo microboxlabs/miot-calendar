@@ -56,6 +56,16 @@ public class BookingValidationService {
     }
 
     /**
+     * Validate that {@code slot} has room for one more counted booking: an overbooked
+     * booking already in the slot becoming an ordinary one.
+     */
+    public void validateCapacity(Slot slot) {
+        validateSlotStatus(slot);
+        validateWindowCapacity(slot);
+        validateSlotCapacity(slot);
+    }
+
+    /**
      * Validate moving an existing booking to {@code newSlot}.
      *
      * <p>A move is one booking row whose slot reference changes — the source has its occupancy

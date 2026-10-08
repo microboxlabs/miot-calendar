@@ -33,11 +33,11 @@ public record SlotResponse(
     @Schema(required = true, description = "Maximum booking capacity for this slot", minimum = "1")
     Integer capacity,
 
-    @Schema(required = true, description = "Number of current bookings in this slot", minimum = "0")
+    @Schema(required = true, description = "Number of bookings counted against capacity in this slot "
+        + "(overbooked bookings are not counted)", minimum = "0")
     Integer currentOccupancy,
 
-    @Schema(required = true, description = "Remaining available capacity; never negative "
-        + "(an explicitly overbooked slot reports 0 here and the real count in currentOccupancy)",
+    @Schema(required = true, description = "Remaining available capacity; never negative",
         minimum = "0")
     Integer availableCapacity,
 

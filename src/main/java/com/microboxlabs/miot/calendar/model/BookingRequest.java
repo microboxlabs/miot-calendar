@@ -21,8 +21,9 @@ public record BookingRequest(
     @Schema(description = "Initial lifecycle status (defaults to PLANNED)", examples = {"PLANNED"})
     String status,
 
-    @Schema(description = "Allow this booking to exceed slot and time-window capacity. "
-        + "Closed and generated overflow slots remain protected.", defaultValue = "false")
+    @Schema(description = "Book outside capacity: skips the slot and time-window capacity checks, and "
+        + "the booking is not counted in either. Closed and generated overflow slots remain protected.",
+        defaultValue = "false")
     boolean allowOverbooking
 ) {
     /** Back-compat canonical shape without a status (defaults to PLANNED). */

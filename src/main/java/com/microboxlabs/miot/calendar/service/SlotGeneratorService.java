@@ -1,5 +1,6 @@
 package com.microboxlabs.miot.calendar.service;
 
+import com.microboxlabs.miot.calendar.entity.Booking;
 import com.microboxlabs.miot.calendar.entity.Calendar;
 import com.microboxlabs.miot.calendar.entity.Slot;
 import com.microboxlabs.miot.calendar.entity.TimeWindow;
@@ -105,7 +106,8 @@ public class SlotGeneratorService {
                 counts[0]++;
             } else if (isBlock
                     && existing.status == SlotStatus.OPEN
-                    && existing.currentOccupancy == 0) {
+                    && existing.currentOccupancy == 0
+                    && !Booking.existsInSlot(existing.id)) {
                 // BLOCK overrides an unbooked OPEN slot left by a colliding window.
                 existing.status = SlotStatus.CLOSED;
                 existing.timeWindow = timeWindow;
