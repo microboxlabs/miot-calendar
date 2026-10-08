@@ -140,6 +140,33 @@ class OverbookedBookingResourceTest {
     }
 
     @Test
+    void movingAnOverbookedBookingToItsOwnSlotMakesItOrdinary() {
+        String calendarId = calendar("ob-same-slot", 10, 2);
+        String autoId = book(calendarId, "auto-1", 8, true).statusCode(201).extract().path("id");
+
+        move(autoId, 8).statusCode(200).body("overbooked", equalTo(false));
+        assertOccupancy(calendarId, 8, 1);
+
+        // Now ordinary: a second move to the same slot changes nothing
+        move(autoId, 8).statusCode(200).body("overbooked", equalTo(false));
+        assertOccupancy(calendarId, 8, 1);
+    }
+
+    @Test
+    void movingAnOverbookedBookingToItsOwnFullSlotIsRejected() {
+        String calendarId = calendar("ob-same-slot-full", 10, 2);
+        String autoId = book(calendarId, "auto-1", 8, true).statusCode(201).extract().path("id");
+        book(calendarId, "manual-1", 8, false).statusCode(201);
+
+        // Slot 8 is full (parallelism 1)
+        move(autoId, 8).statusCode(409);
+
+        given().when().get(BOOKINGS_PATH + "/" + autoId)
+            .then().statusCode(200).body("overbooked", equalTo(true));
+        assertOccupancy(calendarId, 8, 1);
+    }
+
+    @Test
     void cancellingAnOverbookedBookingKeepsOccupancy() {
         String calendarId = calendar("ob-cancel", 10, 2);
         String autoId = book(calendarId, "auto-1", 8, true).statusCode(201).extract().path("id");

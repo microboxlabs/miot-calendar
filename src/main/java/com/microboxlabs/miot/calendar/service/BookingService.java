@@ -183,7 +183,8 @@ public class BookingService {
 
         boolean slotChanged = !oldSlot.id.equals(newSlot.id);
         // A move is a planner's decision: an overbooked booking becomes an ordinary
-        // one and must fit in the target slot like a new booking.
+        // one and must fit in the target slot like a new booking, also when the
+        // planner picks the slot it already sits in.
         boolean wasOverbooked = booking.overbooked;
 
         if (slotChanged) {
@@ -192,7 +193,10 @@ public class BookingService {
             } else {
                 validationService.validateMove(oldSlot, newSlot, booking.resourceId);
             }
+        } else if (wasOverbooked) {
+            validationService.validateCapacity(newSlot);
         }
+        booking.overbooked = false;
 
         if (slotChanged) {
             booking.slot = newSlot;
@@ -203,7 +207,6 @@ public class BookingService {
             // slot restarts the lifecycle. Same-slot payload refreshes keep
             // the current status.
             booking.status = BookingStatus.PLANNED;
-            booking.overbooked = false;
         }
         if (newResource != null) {
             booking.resourceType = newResource.type();
@@ -219,6 +222,10 @@ public class BookingService {
             slotService.incrementOccupancy(newSlot);
             LOG.infof("Moved booking %s for resource %s from slot %s to slot %s",
                 booking.id, booking.resourceId, oldSlot.id, newSlot.id);
+        } else if (wasOverbooked) {
+            slotService.incrementOccupancy(newSlot);
+            LOG.infof("Booking %s for resource %s is no longer overbooked (slot %s unchanged)",
+                booking.id, booking.resourceId, newSlot.id);
         } else {
             LOG.infof("Updated booking %s payload in place (slot unchanged)", booking.id);
         }
