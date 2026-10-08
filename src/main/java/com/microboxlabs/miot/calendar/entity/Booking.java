@@ -77,6 +77,12 @@ public class Booking extends PanacheEntityBase {
     @Column(name = "status", nullable = false, length = 20)
     public BookingStatus status = BookingStatus.PLANNED;
 
+    // Outside capacity: not counted in the slot's occupancy nor in the window's
+    // daily cap. Set by an allowOverbooking create; cleared when the booking is
+    // moved to another slot.
+    @Column(name = "overbooked", nullable = false)
+    public boolean overbooked = false;
+
     // Synchronization state of the booking's current data with an external
     // downstream system — orthogonal to the lifecycle status; null =
     // untracked. Written by the integration layer that mirrors bookings
@@ -242,9 +248,18 @@ public class Booking extends PanacheEntityBase {
     /**
      * Count bookings made in a given time window on a given date — used to enforce a MANUAL
      * window's total-capacity cap (the cap applies across all of the window's slots for the day).
+     * Overbooked bookings are outside capacity and not counted.
      */
     public static long countByWindowAndDate(UUID timeWindowId, LocalDate date) {
-        return count("slot.timeWindow.id = ?1 and slotDate = ?2", timeWindowId, date);
+        return count("slot.timeWindow.id = ?1 and slotDate = ?2 and overbooked = false",
+            timeWindowId, date);
+    }
+
+    /**
+     * Whether any booking, overbooked or not, sits in the slot.
+     */
+    public static boolean existsInSlot(UUID slotId) {
+        return count("slot.id", slotId) > 0;
     }
 
     /**

@@ -121,11 +121,14 @@ public class BookingService {
         BookingStatus initialStatus = BookingStatus.parse(request.status());
         booking.status = initialStatus != null ? initialStatus : BookingStatus.PLANNED;
         booking.createdBy = createdBy;
+        booking.overbooked = request.allowOverbooking();
 
         booking.persist();
 
-        // Increment slot occupancy
-        slotService.incrementOccupancy(slot);
+        // An overbooked booking is outside capacity
+        if (!booking.overbooked) {
+            slotService.incrementOccupancy(slot);
+        }
 
         LOG.infof("Created booking %s for resource %s in slot %s",
             booking.id, booking.resourceId, slot.id);
@@ -179,9 +182,16 @@ public class BookingService {
         ));
 
         boolean slotChanged = !oldSlot.id.equals(newSlot.id);
+        // A move is a planner's decision: an overbooked booking becomes an ordinary
+        // one and must fit in the target slot like a new booking.
+        boolean wasOverbooked = booking.overbooked;
 
         if (slotChanged) {
-            validationService.validateMove(oldSlot, newSlot, booking.resourceId);
+            if (wasOverbooked) {
+                validationService.validateBooking(newSlot, booking.resourceId, false);
+            } else {
+                validationService.validateMove(oldSlot, newSlot, booking.resourceId);
+            }
         }
 
         if (slotChanged) {
@@ -193,6 +203,7 @@ public class BookingService {
             // slot restarts the lifecycle. Same-slot payload refreshes keep
             // the current status.
             booking.status = BookingStatus.PLANNED;
+            booking.overbooked = false;
         }
         if (newResource != null) {
             booking.resourceType = newResource.type();
@@ -202,7 +213,9 @@ public class BookingService {
         booking.persist();
 
         if (slotChanged) {
-            slotService.decrementOccupancy(oldSlot);
+            if (!wasOverbooked) {
+                slotService.decrementOccupancy(oldSlot);
+            }
             slotService.incrementOccupancy(newSlot);
             LOG.infof("Moved booking %s for resource %s from slot %s to slot %s",
                 booking.id, booking.resourceId, oldSlot.id, newSlot.id);
@@ -427,8 +440,9 @@ public class BookingService {
         // Delete the booking
         booking.delete();
 
-        // Decrement slot occupancy
-        slotService.decrementOccupancy(slot);
+        if (!booking.overbooked) {
+            slotService.decrementOccupancy(slot);
+        }
 
         LOG.infof("Cancelled booking %s for resource %s", bookingId, booking.resourceId);
     }

@@ -26,6 +26,10 @@ public record BookingResponse(
     @Schema(required = true, description = "Lifecycle status of the booking")
     BookingStatus status,
 
+    @Schema(required = true, description = "Outside capacity: not counted in the slot's occupancy "
+        + "nor in the time window's daily cap")
+    boolean overbooked,
+
     @Schema(description = "External-system acknowledgement of the booking's current data (null = untracked)")
     BookingSyncStatus syncStatus,
 
@@ -63,6 +67,7 @@ public record BookingResponse(
                 booking.slotMinutes
             ),
             booking.status,
+            booking.overbooked,
             booking.syncStatus,
             booking.syncDetail,
             booking.syncAt,

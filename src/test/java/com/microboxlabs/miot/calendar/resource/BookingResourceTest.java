@@ -361,9 +361,9 @@ class BookingResourceTest {
             .get("/api/v1/miot-calendar/slots")
             .then()
             .statusCode(200)
-            .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.currentOccupancy", equalTo(3))
+            // The overbooked booking is outside capacity and not counted
+            .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.currentOccupancy", equalTo(2))
             .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.capacity", equalTo(2))
-            // Occupancy stays observable past capacity; availableCapacity never goes negative.
             .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.availableCapacity", equalTo(0))
             .body("data.find { it.slotHour == 10 && it.slotMinutes == 0 }.status", equalTo("FULL"));
     }
