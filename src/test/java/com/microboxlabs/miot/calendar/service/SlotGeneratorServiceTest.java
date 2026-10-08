@@ -1,5 +1,6 @@
 package com.microboxlabs.miot.calendar.service;
 
+import com.microboxlabs.miot.calendar.entity.Booking;
 import com.microboxlabs.miot.calendar.entity.Calendar;
 import com.microboxlabs.miot.calendar.entity.Slot;
 import com.microboxlabs.miot.calendar.entity.TimeWindow;
@@ -166,6 +167,37 @@ class SlotGeneratorServiceTest {
         slots.stream()
                 .filter(s -> s.slotHour >= 10)
                 .forEach(s -> assertEquals(SlotStatus.CLOSED, s.status, "slot at " + s.slotHour + ":" + s.slotMinutes));
+    }
+
+    @Test
+    @TestTransaction
+    void blockWindowKeepsACellThatOnlyHoldsAnOverbookedBooking() {
+        // An overbooked booking leaves occupancy at 0, so occupancy alone cannot tell
+        // the BLOCK override that the cell is booked.
+        Calendar cal = persistCalendar("gsvc-block-ob", 1);
+        TimeWindow window = persistWindow(cal, TimeWindowKind.WINDOW, SlotGenerationMode.MANUAL, 8, 12, 60, 2);
+        slotGeneratorService.generateSlots(cal.id, A_MONDAY, A_MONDAY);
+
+        Slot tenOClock = Slot.findByCalendarAndDateTime(cal.id, A_MONDAY, 10, 0);
+        Booking booking = new Booking();
+        booking.slot = tenOClock;
+        booking.calendar = cal;
+        booking.resourceId = "auto-1";
+        booking.overbooked = true;
+        booking.persist();
+        assertEquals(0, tenOClock.currentOccupancy);
+
+        persistWindow(cal, TimeWindowKind.BLOCK, SlotGenerationMode.MANUAL, 10, 12, 30, 0);
+        Panache.getEntityManager().flush();
+        Panache.getEntityManager().clear();
+
+        slotGeneratorService.generateSlots(cal.id, A_MONDAY, A_MONDAY);
+
+        Slot booked = Slot.findByCalendarAndDateTime(cal.id, A_MONDAY, 10, 0);
+        assertEquals(SlotStatus.OPEN, booked.status, "the booked cell is not closed");
+        assertEquals(window.id, booked.timeWindow.id, "the booked cell stays in its window");
+        assertEquals(SlotStatus.CLOSED, Slot.findByCalendarAndDateTime(cal.id, A_MONDAY, 11, 0).status,
+                "an unbooked cell is still closed");
     }
 
     @Test
