@@ -10,6 +10,7 @@ import com.microboxlabs.miot.calendar.model.SlotGenerationMode;
 import com.microboxlabs.miot.calendar.model.SlotManagerTriggerEvent;
 import com.microboxlabs.miot.calendar.model.TimeWindowKind;
 import com.microboxlabs.miot.calendar.model.TimeWindowRequest;
+import com.microboxlabs.miot.calendar.model.TimeWindowUsageResponse;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
@@ -345,6 +346,28 @@ public class CalendarService {
      */
     public List<TimeWindow> getTimeWindows(UUID calendarId) {
         return TimeWindow.findActiveByCalendarId(calendarId);
+    }
+
+    /**
+     * Booked and remaining capacity of each bookable window, per date that has slots.
+     * Counts bookings the same way the window cap check does: overbooked ones are left out.
+     */
+    public List<TimeWindowUsageResponse> getTimeWindowUsage(UUID calendarId, LocalDate startDate, LocalDate endDate) {
+        List<Object[]> rows = Slot.getEntityManager().createQuery(
+                "select tw.id, s.slotDate, tw.capacity, count(b.id) from Slot s join s.timeWindow tw "
+                + "left join Booking b on b.slot = s and b.overbooked = false "
+                + "where s.calendar.id = :calendarId and s.slotDate >= :startDate and s.slotDate <= :endDate "
+                + "and tw.kind = :kind "
+                + "group by tw.id, s.slotDate, tw.capacity order by s.slotDate", Object[].class)
+            .setParameter("calendarId", calendarId)
+            .setParameter("startDate", startDate)
+            .setParameter("endDate", endDate)
+            .setParameter("kind", TimeWindowKind.WINDOW)
+            .getResultList();
+        return rows.stream()
+            .map(r -> TimeWindowUsageResponse.of((UUID) r[0], (LocalDate) r[1],
+                ((Number) r[2]).intValue(), ((Number) r[3]).intValue()))
+            .toList();
     }
 
     /**

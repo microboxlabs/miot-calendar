@@ -123,6 +123,25 @@ class OverbookedBookingResourceTest {
     }
 
     @Test
+    void windowUsageLeavesOverbookedBookingsOut() {
+        String calendarId = calendar("ob-usage", 10, 2);
+        book(calendarId, "auto-1", 8, true).statusCode(201);
+        book(calendarId, "auto-2", 9, true).statusCode(201);
+        book(calendarId, "manual-1", 8, false).statusCode(201);
+
+        given()
+            .queryParam("startDate", DATE.toString())
+            .queryParam("endDate", DATE.toString())
+            .when().get(CALENDARS_PATH + "/" + calendarId + "/time-windows/usage")
+            .then().statusCode(200)
+            .body("size()", equalTo(1))
+            .body("[0].date", equalTo(DATE.toString()))
+            .body("[0].capacity", equalTo(2))
+            .body("[0].booked", equalTo(1))
+            .body("[0].available", equalTo(1));
+    }
+
+    @Test
     void movingAnOverbookedBookingMakesItOrdinary() {
         String calendarId = calendar("ob-move", 11, 2);
         String autoId = book(calendarId, "auto-1", 8, true).statusCode(201).extract().path("id");
