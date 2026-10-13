@@ -18,6 +18,7 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -233,6 +234,22 @@ public class CalendarResource {
             .map(TimeWindowResponse::from)
             .toList();
         return Response.ok(response).build();
+    }
+
+    @GET
+    @Path("/{calendarId}/time-windows/usage")
+    @Operation(operationId = "getTimeWindowUsage", summary = "Get time window usage",
+        description = "Booked and remaining capacity of each bookable time window, per date that has slots. "
+            + "Overbooked bookings are not counted. Defaults to the next 7 days if no dates are provided.")
+    @APIResponse(responseCode = "200", description = "Usage per time window and date",
+        content = @Content(schema = @Schema(implementation = TimeWindowUsageResponse[].class)))
+    public Response getTimeWindowUsage(
+            @Parameter(description = "Unique identifier of the calendar", required = true) @PathParam("calendarId") UUID calendarId,
+            @Parameter(description = "Start date of the range (inclusive, defaults to today)", schema = @Schema(format = "date")) @QueryParam("startDate") LocalDate startDate,
+            @Parameter(description = "End date of the range (inclusive, defaults to start + 7 days)", schema = @Schema(format = "date")) @QueryParam("endDate") LocalDate endDate) {
+        LocalDate start = startDate != null ? startDate : LocalDate.now();
+        LocalDate end = endDate != null ? endDate : start.plusDays(7);
+        return Response.ok(calendarService.getTimeWindowUsage(calendarId, start, end)).build();
     }
 
     @POST
