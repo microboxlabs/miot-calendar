@@ -19,6 +19,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -247,7 +248,10 @@ public class CalendarResource {
             @Parameter(description = "Unique identifier of the calendar", required = true) @PathParam("calendarId") UUID calendarId,
             @Parameter(description = "Start date of the range (inclusive, defaults to today)", schema = @Schema(format = "date")) @QueryParam("startDate") LocalDate startDate,
             @Parameter(description = "End date of the range (inclusive, defaults to start + 7 days)", schema = @Schema(format = "date")) @QueryParam("endDate") LocalDate endDate) {
-        LocalDate start = startDate != null ? startDate : LocalDate.now();
+        // "Today" in the calendar's own timezone
+        LocalDate start = startDate != null ? startDate : calendarService.getCalendarById(calendarId)
+            .map(c -> LocalDate.now(ZoneId.of(c.timezone)))
+            .orElseGet(() -> LocalDate.now(ZoneId.systemDefault()));
         LocalDate end = endDate != null ? endDate : start.plusDays(7);
         return Response.ok(calendarService.getTimeWindowUsage(calendarId, start, end)).build();
     }
